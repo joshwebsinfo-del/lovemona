@@ -30,6 +30,7 @@ interface ChatPayload {
   storageIv?: string;
   lat?: number;
   lng?: number;
+  expiresAt?: number;
 }
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
@@ -48,6 +49,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
   const [viewMedia, setViewMedia] = useState<{ url: string; type: 'photo' | 'video' } | null>(null);
   const [fullScreenMap, setFullScreenMap] = useState<{lat: number, lng: number} | null>(null);
+  const [showLocationMenu, setShowLocationMenu] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -249,7 +251,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            return;
         }
 
-        if (payload.type === 'text' || payload.type === 'media') {
+        if (payload.type === 'text' || payload.type === 'media' || payload.type === 'location') {
           setIsPartnerTyping(false); // Cancel typing when message arrives
           const db = await initDB();
           const incomingId = data.messageId || Date.now().toString();
@@ -354,7 +356,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       });
       
       // 2. Persist real payloads to Supabase Database
-      if (payload.type === 'text' || payload.type === 'media') {
+      if (payload.type === 'text' || payload.type === 'media' || payload.type === 'location') {
          await supabase.from('messages').insert({
             id: messageId || Date.now().toString(),
             sender_id: myUserId,
@@ -418,7 +420,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   };
 
   // ── LOCATION DROP ──
-  const handleLocationDrop = () => {
+  const handleLocationDrop = (durationHrs: number) => {
+    setShowLocationMenu(false);
     if (!navigator.geolocation) return alert('Location not supported by your browser');
     setIsProcessingMedia(true);
     navigator.geolocation.getCurrentPosition(
@@ -426,8 +429,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         setIsProcessingMedia(false);
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
+        const expiresAt = Date.now() + (durationHrs * 60 * 60 * 1000);
         
-        const payload: ChatPayload = { type: 'location', lat, lng, text: `📍 Live Check-In` };
+        const payload: ChatPayload = { type: 'location', lat, lng, text: `📍 Live Check-In`, expiresAt };
         const msgId = Date.now().toString();
         
         const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
@@ -862,26 +866,37 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         return <MediaWrapper pl={payload} />;
       }
       if (payload.type === 'location' && payload.lat && payload.lng) {
+        const isExpired = payload.expiresAt && Date.now() > payload.expiresAt;
         return (
           <div className="flex flex-col space-y-2 w-[220px]">
             <p className="text-[13px] font-bold text-white mb-0.5 tracking-tight flex items-center">
-               <MapPin size={14} className="text-primary mr-1" /> Live Check-In
+               <MapPin size={14} className={isExpired ? "text-white/50 mr-1" : "text-primary mr-1"} /> 
+               {isExpired ? 'Location Expired' : 'Live Location'}
             </p>
-            <div className="rounded-[20px] overflow-hidden shadow-xl border border-white/10 h-40 w-full cursor-pointer relative group"
-                 onClick={() => setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
+            <div className={`rounded-[20px] overflow-hidden shadow-xl border border-white/10 h-40 w-full relative group ${isExpired ? 'opacity-50 grayscale pointer-events-none' : 'cursor-pointer'}`}
+                 onClick={() => !isExpired && setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
                <iframe 
-                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=15&output=embed`}
+                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=16&output=embed`}
                  className="w-full h-full pointer-events-none"
                  style={{ border: 0 }}
                  scrolling="no"
                />
-               <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
-                  <div className="bg-primary text-white rounded-full p-2 shadow-2xl backdrop-blur-md group-hover:scale-110 transition-transform">
-                     <MapPin size={24} className="fill-current" />
-                  </div>
-               </div>
+               {!isExpired && (
+                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
+                    <div className="bg-primary text-white rounded-full p-2 shadow-2xl backdrop-blur-md group-hover:scale-110 transition-transform">
+                       <MapPin size={24} className="fill-current" />
+                    </div>
+                 </div>
+               )}
             </div>
-            <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to explore</p>
+            {!isExpired && (
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                   <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to explore</p>
+                   <button onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${payload.lat},${payload.lng}`, '_blank')} className="text-[10px] bg-white/10 text-white hover:bg-white/20 transition-colors rounded-full text-center uppercase tracking-widest mt-1 py-1 px-2 font-bold cursor-pointer">
+                      Directions
+                   </button>
+                </div>
+            )}
           </div>
         );
       }
@@ -1028,9 +1043,21 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
               </div>
             ) : (
               <>
-                <button onClick={handleLocationDrop} className="p-2 text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/5 active:scale-95" title="Location Check-in">
-                   <MapPin size={22} />
-                </button>
+                <div className="relative">
+                   <button onClick={() => setShowLocationMenu(!showLocationMenu)} className={`p-2 transition-colors rounded-full active:scale-95 ${showLocationMenu ? 'bg-primary/20 text-primary' : 'text-white/40 hover:text-white hover:bg-white/5'}`} title="Location Check-in">
+                      <MapPin size={22} />
+                   </button>
+                   <AnimatePresence>
+                      {showLocationMenu && (
+                         <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute bottom-12 left-0 w-44 bg-zinc-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
+                            <p className="text-[10px] text-white/40 uppercase tracking-widest font-black px-3 py-1 mb-1">Share Location For:</p>
+                            <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-sm hover:bg-white/10 rounded-xl transition-colors font-medium">15 Minutes</button>
+                            <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-sm hover:bg-white/10 rounded-xl transition-colors font-medium">1 Hour</button>
+                            <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-sm hover:bg-white/10 rounded-xl transition-colors font-medium">8 Hours</button>
+                         </motion.div>
+                      )}
+                   </AnimatePresence>
+                </div>
                 <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/5 active:scale-95" title="Media Upload">
                    <Camera size={22} />
                 </button>
