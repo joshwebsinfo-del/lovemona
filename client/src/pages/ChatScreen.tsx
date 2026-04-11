@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2 } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -59,6 +59,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   // MediaRecorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const activeVoiceEffectRef = useRef<string | null>(null);
 
   // WebRTC Refs
   const [callState, setCallState] = useState<{ active: boolean; type: 'video' | 'voice'; incoming: boolean; connected: boolean; pendingSdp?: RTCSessionDescriptionInit; }>({ active: false, type: 'video', incoming: false, connected: false });
@@ -401,6 +402,34 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     await sendSecurePayload(payload, msgId);
   };
 
+  // ── LOCATION DROP ──
+  const handleLocationDrop = () => {
+    if (!navigator.geolocation) return alert('Location not supported by your browser');
+    setIsProcessingMedia(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setIsProcessingMedia(false);
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+        
+        const payload: ChatPayload = { type: 'text', text: `📍 I'm checking in right here:\n${mapUrl}\n\nSafe and sound. ❤️` };
+        const msgId = Date.now().toString();
+        
+        const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+        setMessages(prev => [...prev, msg]);
+        scrollToBottom();
+        const db = await initDB();
+        await db.put('messages', msg);
+        await sendSecurePayload(payload, msgId);
+      },
+      () => {
+        setIsProcessingMedia(false);
+        alert('Failed to drop location pin. Please allow location access.');
+      }
+    );
+  };
+
   // ── PHOTO UPLOAD ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -521,11 +550,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
+        const effectStr = activeVoiceEffectRef.current ? `;effect=${activeVoiceEffectRef.current}` : '';
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.onload = async () => {
           const b64 = reader.result as string;
-          const payload: ChatPayload = { type: 'media', text: 'Voice Note', mediaType: 'audio/webm', mediaData: b64 };
+          const payload: ChatPayload = { type: 'media', text: 'Voice Note' + (activeVoiceEffectRef.current ? ` (${activeVoiceEffectRef.current})` : ''), mediaType: 'audio/webm' + effectStr, mediaData: b64 };
           const msgId = Date.now().toString();
           
           const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
@@ -578,7 +608,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (effect?: 'chipmunk' | 'deep') => {
+    activeVoiceEffectRef.current = effect || null;
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -696,6 +727,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            const [src, setSrc] = React.useState(pl.mediaData || '');
            const [loading, setLoading] = React.useState(!!pl.storagePath && !pl.mediaData);
 
+           const match = pl.mediaType?.match(/effect=(chipmunk|deep)/);
+           const effect = match ? match[1] : null;
+           const audioRef = React.useRef<HTMLAudioElement>(null);
+           React.useEffect(() => {
+              if (audioRef.current && effect) {
+                 (audioRef.current as any).preservesPitch = false;
+                 audioRef.current.playbackRate = effect === 'chipmunk' ? 1.6 : 0.6;
+              }
+           }, [src, effect]);
+
            React.useEffect(() => {
               if (pl.storagePath && pl.storageIv && !src) {
                  const loadBlob = async () => {
@@ -734,10 +775,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                  )}
                  {isAudio && (
                     <div className="flex items-center space-x-3 bg-white/10 py-2 px-3 rounded-xl border border-white/10">
-                       <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                          <Volume2 size={16} />
+                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${effect === 'chipmunk' ? 'bg-fuchsia-500/20 text-fuchsia-500' : effect === 'deep' ? 'bg-indigo-600/20 text-indigo-400' : 'bg-primary/20 text-primary'}`}>
+                          {effect ? <Wand2 size={16} /> : <Volume2 size={16} />}
                        </div>
-                       <audio src={src} controls className="h-8 w-[150px]" />
+                       <audio ref={audioRef} src={src} controls className="h-8 w-[150px]" />
                     </div>
                  )}
                  {!isImg && !isAudio && !isVideo && <span className="underline italic text-white/50">Unsupported media</span>}
@@ -890,7 +931,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
               </div>
             ) : (
               <>
-                <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/5 active:scale-95">
+                <button onClick={handleLocationDrop} className="p-2 text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/5 active:scale-95" title="Location Check-in">
+                   <MapPin size={22} />
+                </button>
+                <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/40 hover:text-white transition-colors rounded-full hover:bg-white/5 active:scale-95" title="Media Upload">
                    <Camera size={22} />
                 </button>
                 <input 
@@ -925,12 +969,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
             <div className="flex items-center space-x-2">
                <button 
                  onClick={cancelRecording}
-                 className="w-14 h-14 bg-zinc-800 rounded-full flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-transform border border-white/5"
+                 className="w-11 h-11 bg-zinc-800 rounded-full flex items-center justify-center text-white/50 hover:text-white active:scale-95 transition-transform border border-white/5"
                >
-                 <X size={24} />
+                 <X size={20} />
                </button>
                <button 
-                 onClick={stopRecording}
+                 onClick={() => stopRecording('deep')}
+                 className="w-11 h-11 bg-indigo-600 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform shadow-lg"
+                 title="Demon Voice"
+               >
+                 <span className="font-black text-[10px]">DEEP</span>
+               </button>
+               <button 
+                 onClick={() => stopRecording('chipmunk')}
+                 className="w-11 h-11 bg-fuchsia-500 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform shadow-lg"
+                 title="Chipmunk Voice"
+               >
+                 <span className="font-black text-[10px]">FUN</span>
+               </button>
+               <button 
+                 onClick={() => stopRecording()}
                  className="w-14 h-14 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform shadow-lg shadow-red-500/30"
                >
                  <Send size={22} className="ml-1" />

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Camera, Lock, Heart, Activity, Settings, ShieldAlert } from 'lucide-react';
 import { initDB } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, decryptMessage } from '../lib/crypto';
 import { initSocket, getSocket } from '../lib/socket';
 import type { Partner, AuthConfig } from '../lib/types';
@@ -73,6 +74,20 @@ export const DashboardScreen: React.FC = () => {
 
       if (p && identity) {
         try {
+          // Force refresh partner profile from Cloud
+          try {
+             const { data: cloudPartner } = await supabase.from('users').select('nickname, avatar').eq('user_id', p.userId).single();
+             if (cloudPartner) {
+                const changed = (p.nick !== cloudPartner.nickname) || (p.avatar !== cloudPartner.avatar);
+                if (changed) {
+                   p.nick = cloudPartner.nickname || p.nick;
+                   p.avatar = cloudPartner.avatar || p.avatar;
+                   await db.put('partner', p);
+                   setPartner({ ...p });
+                }
+             }
+          } catch(e) { console.warn('Supabase fetch failed', e); }
+
           const importedPartnerKey = await importPublicKey(p.publicKeyPem);
           const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
           
