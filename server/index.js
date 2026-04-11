@@ -105,8 +105,8 @@ app.get('/health', (req, res) => res.json({
   users: [...users.keys()],
 }));
 
-// Client-side routing catch-all
-app.get('/:path*', (req, res) => {
+// Client-side routing catch-all (Extreme compatibility for Express 5+)
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });
 
