@@ -106,7 +106,7 @@ app.get('/health', (req, res) => res.json({
 }));
 
 // Client-side routing catch-all
-app.get('(.*)', (req, res) => {
+app.get('/:path*', (req, res) => {
   res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
 });
 
