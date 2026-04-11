@@ -371,7 +371,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
-    if (Math.random() > 0.8) sendSecurePayload({ type: 'typing' });
+    if (!typingTimeoutRef.current) {
+        sendSecurePayload({ type: 'typing' });
+        typingTimeoutRef.current = setTimeout(() => { typingTimeoutRef.current = null; }, 5000) as any;
+    }
   };
 
   const handleMessageTap = async (msgId: string) => {
@@ -1047,75 +1050,79 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         <div className="flex items-end space-x-2">
           
           {/* Integrated Input Pill */}
-          <div className="flex-1 flex items-center bg-[#151518]/90 backdrop-blur-3xl border border-white/5 rounded-[40px] pr-2 pl-2 py-2 relative min-h-[64px] shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+          <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
             {isProcessingMedia && (
                <div className="absolute inset-0 bg-black/60 rounded-[40px] flex items-center justify-center z-10 backdrop-blur-sm">
                  <div className="w-5 h-5 border-2 border-primary/50 border-t-primary rounded-full animate-spin" />
                </div>
             )}
             
-            {isRecording ? (
-              <div className="flex-1 flex items-center px-4">
-                 <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-ping" />
-                 <span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
-                 <div className="ml-auto text-[10px] text-white/40 uppercase tracking-widest font-black mr-2">Recording</div>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                   <button onClick={() => setShowLocationMenu(!showLocationMenu)} className={`p-2 transition-colors rounded-full active:scale-90 ${showLocationMenu ? 'text-primary' : 'text-white/40 hover:text-white'}`} title="Location">
-                      <MapPin size={22} />
+            <div className="flex-1 flex items-center min-w-0">
+               {isRecording ? (
+                 <div className="flex-1 flex items-center px-4">
+                    <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-ping" />
+                    <span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
+                    <div className="ml-auto text-[10px] text-white/40 uppercase tracking-widest font-black mr-2">Recording</div>
+                 </div>
+               ) : (
+                 <>
+                   <div className="relative flex-shrink-0">
+                      <button onClick={() => setShowLocationMenu(!showLocationMenu)} className={`p-2 transition-colors rounded-full active:scale-90 ${showLocationMenu ? 'text-primary' : 'text-white/40 hover:text-white'}`} title="Location">
+                         <MapPin size={22} />
+                      </button>
+                      <AnimatePresence>
+                         {showLocationMenu && (
+                            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-44 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
+                               <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">15 Mins</button>
+                               <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">1 Hour</button>
+                               <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">8 Hours</button>
+                            </motion.div>
+                         )}
+                      </AnimatePresence>
+                   </div>
+                   <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
+                      <Camera size={22} />
                    </button>
-                   <AnimatePresence>
-                      {showLocationMenu && (
-                         <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-44 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
-                            <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">15 Mins</button>
-                            <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">1 Hour</button>
-                            <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">8 Hours</button>
-                         </motion.div>
-                      )}
-                   </AnimatePresence>
-                </div>
-                <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90">
-                   <Camera size={22} />
-                </button>
-                <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
-                
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={handleTyping}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
-                  placeholder="Whisper something..."
-                  className="bg-transparent flex-1 min-w-0 outline-none text-white text-[16px] px-2 placeholder:text-white/20"
-                />
-              </>
-            )}
+                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
+                   
+                   <input
+                     type="text"
+                     value={inputValue}
+                     onChange={handleTyping}
+                     onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
+                     placeholder="Whisper something..."
+                     className="bg-transparent flex-1 min-w-0 outline-none text-white text-[16px] px-2 placeholder:text-white/20"
+                   />
+                 </>
+               )}
+            </div>
 
-            {/* SEND / RECORD Integrated into Pill */}
-            <div className="flex items-center space-x-1.5 ml-2 flex-shrink-0">
+            {/* ACTION BUTTONS (Inner Pill) */}
+            <div className="flex items-center space-x-1.5 ml-1 flex-shrink-0 mr-1">
                {inputValue.trim() ? (
                  <motion.button 
+                   layoutId="chat-primary-action"
                    initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                    onClick={handleSendText}
-                   className="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg flex-shrink-0"
+                   className="w-11 h-11 bg-primary rounded-full flex items-center justify-center text-white active:scale-90 shadow-lg flex-shrink-0"
                  >
-                   <Send size={20} className="ml-0.5" />
+                   <Send size={18} className="ml-0.5" />
                  </motion.button>
                ) : isRecording ? (
                   <div className="flex items-center space-x-1 flex-shrink-0">
-                     <button onClick={cancelRecording} className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white/60 active:scale-95 flex-shrink-0"><X size={18} /></button>
-                     <button onClick={() => stopRecording('deep')} className="w-11 h-11 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[9px] font-black active:scale-95 shadow-lg flex-shrink-0">DEEP</button>
-                     <button onClick={() => stopRecording('chipmunk')} className="w-11 h-11 bg-fuchsia-500 rounded-full flex items-center justify-center text-white text-[9px] font-black active:scale-95 shadow-lg flex-shrink-0">FUN</button>
-                     <button onClick={() => stopRecording()} className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-lg flex-shrink-0"><Send size={20} /></button>
+                     <button onClick={cancelRecording} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 active:scale-95 flex-shrink-0"><X size={16} /></button>
+                     <button onClick={() => stopRecording('deep')} className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95 shadow-lg flex-shrink-0">DEEP</button>
+                     <button onClick={() => stopRecording('chipmunk')} className="w-10 h-10 bg-fuchsia-500 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95 shadow-lg flex-shrink-0">FUN</button>
+                     <button onClick={() => stopRecording()} className="w-11 h-11 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-lg flex-shrink-0"><Send size={18} /></button>
                   </div>
                ) : (
                  <motion.button 
+                   layoutId="chat-primary-action"
                    initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
                    onClick={startRecording}
-                   className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90 flex-shrink-0"
+                   className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90 flex-shrink-0"
                  >
-                   <Mic size={22} />
+                   <Mic size={20} />
                  </motion.button>
                )}
             </div>

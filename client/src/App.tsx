@@ -213,13 +213,13 @@ const AppContent = () => {
   return (
     <div className="h-screen w-full bg-background overflow-hidden flex flex-col">
       <div className="flex-1 relative overflow-hidden">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           <motion.div
             key={location.pathname + (isFakeMode ? '-fake' : '')}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.1, ease: 'linear' }}
             className="absolute inset-0"
           >
             {isFakeMode ? (
