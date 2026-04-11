@@ -47,6 +47,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   // States
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
   const [viewMedia, setViewMedia] = useState<{ url: string; type: 'photo' | 'video' } | null>(null);
+  const [fullScreenMap, setFullScreenMap] = useState<{lat: number, lng: number} | null>(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -862,25 +863,25 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       }
       if (payload.type === 'location' && payload.lat && payload.lng) {
         return (
-          <div className="flex flex-col space-y-2 w-[200px]">
+          <div className="flex flex-col space-y-2 w-[220px]">
             <p className="text-[13px] font-bold text-white mb-0.5 tracking-tight flex items-center">
                <MapPin size={14} className="text-primary mr-1" /> Live Check-In
             </p>
-            <div className="rounded-xl overflow-hidden shadow-lg border border-white/10 h-36 w-full cursor-pointer relative group"
-                 onClick={() => window.open(`https://www.google.com/maps?q=${payload.lat},${payload.lng}`, '_blank')}>
+            <div className="rounded-[20px] overflow-hidden shadow-xl border border-white/10 h-40 w-full cursor-pointer relative group"
+                 onClick={() => setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
                <iframe 
-                 src={`https://www.openstreetmap.org/export/embed.html?bbox=${payload.lng-0.005}%2C${payload.lat-0.005}%2C${payload.lng+0.005}%2C${payload.lat+0.005}&layer=mapnik&marker=${payload.lat}%2C${payload.lng}`}
+                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=15&output=embed`}
                  className="w-full h-full pointer-events-none"
                  style={{ border: 0 }}
                  scrolling="no"
                />
-               <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors flex items-center justify-center pointer-events-none">
-                  <div className="bg-primary/90 text-white rounded-full p-2 shadow-lg backdrop-blur-sm group-hover:scale-110 transition-transform">
-                     <MapPin size={24} />
+               <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
+                  <div className="bg-primary text-white rounded-full p-2 shadow-2xl backdrop-blur-md group-hover:scale-110 transition-transform">
+                     <MapPin size={24} className="fill-current" />
                   </div>
                </div>
             </div>
-            <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to open in Maps</p>
+            <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to explore</p>
           </div>
         );
       }
@@ -1149,19 +1150,36 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
       {/* ── Lightbox Overlay ── */}
       <AnimatePresence>
-         {viewMedia && (
-            <motion.div
-               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-               className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-4 cursor-pointer"
-               onClick={() => setViewMedia(null)}
-            >
-               <button onClick={(e) => { e.stopPropagation(); setViewMedia(null); }} className="absolute top-12 right-6 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white/60 active:scale-95 z-50">
-                  <X size={20} />
-               </button>
-               {viewMedia.type === 'photo' && <img src={viewMedia.url} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl pointer-events-auto" onClick={e => e.stopPropagation()} />}
-               {viewMedia.type === 'video' && <video src={viewMedia.url} controls autoPlay className="max-w-full max-h-[85vh] rounded-lg shadow-2xl pointer-events-auto" onClick={e => e.stopPropagation()} />}
-            </motion.div>
-         )}
+        {viewMedia && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-center items-center">
+            <button onClick={() => setViewMedia(null)} className="absolute top-6 right-6 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95 z-10"><X size={24} /></button>
+            {viewMedia.type === 'photo' && <img src={viewMedia.url} className="max-w-full max-h-full object-contain" alt="Enlarged" />}
+            {viewMedia.type === 'video' && <video src={viewMedia.url} className="max-w-full max-h-full" controls autoPlay />}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Map Lightbox ── */}
+      <AnimatePresence>
+        {fullScreenMap && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black backdrop-blur-xl flex flex-col">
+            <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-10 bg-gradient-to-b from-black/80 to-transparent">
+               <div className="flex items-center text-white font-bold">
+                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center mr-3"><MapPin size={16} className="text-primary" /></div>
+                 <span>Live Location</span>
+               </div>
+               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white/80 active:scale-95"><X size={20} /></button>
+            </div>
+            <div className="flex-1 w-full relative">
+               <iframe 
+                 src={`https://maps.google.com/maps?q=${fullScreenMap.lat},${fullScreenMap.lng}&t=k&z=18&output=embed`}
+                 className="w-full h-full"
+                 style={{ border: 0 }}
+                 allowFullScreen
+               />
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
     </div>
