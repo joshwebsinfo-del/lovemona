@@ -90,10 +90,6 @@ const AppContent = () => {
 
         if (config) {
           setAppConfig(config);
-        } else {
-          const devConfig: AuthConfig = { id: 'pins', realPin: '123456', fakePin: '000000', nickname: 'DevUser' };
-          await db.put('auth', devConfig);
-          setAppConfig(devConfig);
         }
         if (partner) setIsPaired(true);
       } catch (err) {

@@ -71,14 +71,12 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
           setScanStatus('found');
           stopCamera();
           setIsConnecting(true);
-          socketRef.current?.emit('pair:initiate', {
+          socketRef.current?.emit('pair:connect', {
             partnerId: data.userId,
-            myUserId: myIdRef.current,
-            myPublicKey: publicKeyRef.current,
-            config: {
-                nickname: config.nickname,
-                avatar: config.avatar
-            }
+            myId: myIdRef.current,
+            publicKey: publicKeyRef.current,
+            nick: config.nickname,
+            avatar: config.avatar
           });
           return;
         }

@@ -60,7 +60,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('pair:confirm', ({ to, myId, publicKey, nick, avatar }) => {
-    io.to(`pair:${to}`).emit('pair:finalized', { partnerId: myId, publicKey, nick, avatar });
+    io.to(`pair:${to}`).emit('pair:confirmed', { myId, publicKey, nick, avatar });
   });
 
   // ── MESSAGING ─────────────────────────────────────────────────────────────
