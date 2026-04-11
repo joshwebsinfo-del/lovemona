@@ -501,6 +501,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     setShowLocationMenu(false);
     if (!navigator.geolocation) return alert('Location not supported by your browser');
     setIsProcessingMedia(true);
+    
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         setIsProcessingMedia(false);
@@ -518,10 +519,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         await db.put('messages', msg);
         await sendSecurePayload(payload, msgId);
       },
-      () => {
+      (err) => {
         setIsProcessingMedia(false);
-        alert('Failed to drop location pin. Please allow location access.');
-      }
+        alert('Location Error: Please ensure GPS is on and permissions are granted.');
+        console.error(err);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
