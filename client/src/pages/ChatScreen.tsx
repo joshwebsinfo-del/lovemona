@@ -463,31 +463,53 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const handleLocationDrop = (durationHrs: number) => {
     setShowLocationMenu(false);
     if (!navigator.geolocation) return alert('Location not supported by your browser');
+    
+    // Clear previous state and show loader
     setIsProcessingMedia(true);
     
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    };
+
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        setIsProcessingMedia(false);
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
+        const { latitude: lat, longitude: lng } = pos.coords;
+        console.log('📍 Location Acquired:', lat, lng);
+        
         const expiresAt = Date.now() + (durationHrs * 60 * 60 * 1000);
+        const payload: ChatPayload = { 
+          type: 'location', 
+          lat, 
+          lng, 
+          text: `📍 Live Check-In`, 
+          expiresAt 
+        };
         
-        const payload: ChatPayload = { type: 'location', lat, lng, text: `📍 Live Check-In`, expiresAt };
         const msgId = Date.now().toString();
-        
         const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+        
+        // Optimistic Update
         setMessages(prev => [...prev, msg]);
         scrollToBottom();
+        
         const db = await initDB();
         await db.put('messages', msg);
         await sendSecurePayload(payload, msgId);
+        
+        setIsProcessingMedia(false);
       },
       (err) => {
         setIsProcessingMedia(false);
-        alert('Location Error: Please ensure GPS is on and permissions are granted.');
-        console.error(err);
+        console.error('❌ Geolocation Error:', err);
+        let msg = 'Failed to get location.';
+        if (err.code === 1) msg = 'Location access denied. Please allow location permissions in your browser settings.';
+        else if (err.code === 2) msg = 'Location unavailable. Try turning on GPS.';
+        else if (err.code === 3) msg = 'Location request timed out. Please try again.';
+        alert(msg);
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      options
     );
   };
 
