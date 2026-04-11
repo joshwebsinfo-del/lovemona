@@ -4,22 +4,26 @@ import { motion } from 'framer-motion';
 
 interface LiveWallpaperProps {
   type: string;
+  audioLevel?: number; // 0 to 1
 }
 
-export const LiveWallpaper: React.FC<LiveWallpaperProps> = ({ type }) => {
+export const LiveWallpaper: React.FC<LiveWallpaperProps> = ({ type, audioLevel = 0 }) => {
   if (!type) return null;
+
+  const reactiveScale = 1 + (audioLevel * 0.15); // Scale up to 15% with audio
+  const reactiveOpacity = 0.3 + (audioLevel * 0.4); // Brighten with audio
 
   // --- NEBULA ANIMATION ---
   if (type === 'nebula') {
     return (
       <div className="absolute inset-0 overflow-hidden bg-black pointer-events-none z-0">
         <motion.div 
-          animate={{ scale: [1, 1.2, 1], rotate: [0, 5, 0], opacity: [0.3, 0.5, 0.3] }}
+          animate={{ scale: [1 * reactiveScale, 1.2 * reactiveScale, 1 * reactiveScale], rotate: [0, 5, 0], opacity: [0.3, reactiveOpacity, 0.3] }}
           transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }}
           className="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] bg-gradient-to-br from-purple-900/40 via-fuchsia-900/20 to-transparent blur-[100px]"
         />
         <motion.div 
-          animate={{ scale: [1.2, 1, 1.2], rotate: [0, -5, 0], opacity: [0.2, 0.4, 0.2] }}
+          animate={{ scale: [1.2 * reactiveScale, 1 * reactiveScale, 1.2 * reactiveScale], rotate: [0, -5, 0], opacity: [0.2, reactiveOpacity - 0.1, 0.2] }}
           transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
           className="absolute bottom-[-20%] right-[-20%] w-[140%] h-[140%] bg-gradient-to-tl from-indigo-900/40 via-blue-900/20 to-transparent blur-[100px]"
         />
@@ -85,20 +89,31 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = ({ type }) => {
      const url = type.split('video:')[1];
      return (
        <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none z-0">
-          <video 
-            key={url}
-            autoPlay 
-            loop 
-            muted 
-            playsInline 
-            className="absolute inset-0 w-full h-full object-cover opacity-60"
-            style={{ borderRadius: 0 }}
+          <motion.div 
+            animate={{ scale: reactiveScale }}
+            transition={{ duration: 0.1 }}
+            className="absolute inset-0 w-full h-full"
           >
-             <source src={url} type="video/mp4" />
-          </video>
+            <video 
+              key={url}
+              autoPlay 
+              loop 
+              muted 
+              playsInline 
+              className="absolute inset-0 w-full h-full object-cover opacity-60"
+              style={{ borderRadius: 0 }}
+            >
+               <source src={url} type="video/mp4" />
+            </video>
+          </motion.div>
           {/* VIGNETTE & BLENDING GRADIENT */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 shadow-inner" />
           <div className="absolute inset-0 backdrop-blur-[1px] opacity-30" />
+          {/* REACTIVE LIGHT OVERLAY */}
+          <motion.div 
+            animate={{ opacity: audioLevel * 0.3 }}
+            className="absolute inset-0 bg-primary/20 mix-blend-overlay"
+          />
        </div>
      );
   }
