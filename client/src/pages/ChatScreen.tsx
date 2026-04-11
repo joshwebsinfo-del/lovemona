@@ -1087,7 +1087,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   onChange={handleTyping}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
                   placeholder="Whisper something..."
-                  className="bg-transparent flex-1 outline-none text-white text-[16px] px-2 placeholder:text-white/20"
+                  className="bg-transparent flex-1 min-w-0 outline-none text-white text-[16px] px-2 placeholder:text-white/20"
                 />
               </>
             )}
