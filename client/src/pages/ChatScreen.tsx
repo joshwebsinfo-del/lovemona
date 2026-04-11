@@ -62,6 +62,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   // WebRTC Refs
   const [callState, setCallState] = useState<{ active: boolean; type: 'video' | 'voice'; incoming: boolean; connected: boolean; pendingSdp?: RTCSessionDescriptionInit; }>({ active: false, type: 'video', incoming: false, connected: false });
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
   const localStreamRef = useRef<MediaStream | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -283,7 +284,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           setCallState(s => ({ ...s, connected: true }));
         }
         else if (payload.type === 'call:ice') {
-          await pcRef.current?.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => { /* ignored */ });
+          if (pcRef.current?.remoteDescription) {
+            await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+          } else {
+            iceCandidateQueue.current.push(payload.candidate);
+          }
         }
         else if (payload.type === 'call:end') {
           endCallUI();
@@ -608,7 +613,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           { urls: 'stun:stun2.l.google.com:19302' },
           { urls: 'stun:stun3.l.google.com:19302' },
           { urls: 'stun:stun4.l.google.com:19302' },
-          // Using a more reliable group of public TURN servers if possible
+          { urls: 'stun:stun.services.mozilla.com' },
+          { urls: 'stun:stun.l.google.com:19305' },
           { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
           { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
           { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
@@ -633,6 +639,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         sendSecurePayload({ type: 'call:answer', sdp: pc.localDescription || undefined });
+        
+        // Drain ice candidates that arrived early
+        while (iceCandidateQueue.current.length > 0) {
+          const cand = iceCandidateQueue.current.shift();
+          if (cand) await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+        }
       }
     } catch {
       alert('Could not set up call.');
