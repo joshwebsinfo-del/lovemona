@@ -61,6 +61,18 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const audioChunksRef = useRef<Blob[]>([]);
   const activeVoiceEffectRef = useRef<string | null>(null);
 
+  // Video Call Enhancements
+  const callRecorderRef = useRef<MediaRecorder | null>(null);
+  const callChunksRef = useRef<Blob[]>([]);
+  const [videoFilter, setVideoFilter] = useState<{id:string, label:string, css:string}>({id:'none', label:'Normal', css:'none'});
+
+  const VIDEO_FILTERS = [
+    { id: 'none', label: 'Normal', css: 'none' },
+    { id: 'romantic', label: 'Romantic', css: 'saturate(1.2) contrast(1.1) brightness(1.1) hue-rotate(-10deg) sepia(0.2)' },
+    { id: 'vintage', label: 'Vintage', css: 'sepia(0.6) contrast(1.2) brightness(0.9)' },
+    { id: 'bw', label: 'Noir', css: 'grayscale(1) contrast(1.3)' }
+  ];
+
   // WebRTC Refs
   const [callState, setCallState] = useState<{ active: boolean; type: 'video' | 'voice'; incoming: boolean; connected: boolean; pendingSdp?: RTCSessionDescriptionInit; }>({ active: false, type: 'video', incoming: false, connected: false });
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -646,7 +658,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   // ── CALL LOGIC ──
   const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: type === 'video' ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+      });
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
@@ -669,7 +684,59 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       pcRef.current = pc;
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      pc.ontrack = (event) => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0]; };
+      pc.ontrack = (event) => { 
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0]; 
+
+          // Mix Remote Stream + Local Audio to record full conversation memory
+          if (type === 'video' && !callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
+              try {
+                 const remoteStream = event.streams[0];
+                 const mixedStream = new MediaStream([
+                     ...remoteStream.getVideoTracks(),
+                     ...remoteStream.getAudioTracks(),
+                     ...stream.getAudioTracks()
+                 ]);
+                 
+                 callChunksRef.current = [];
+                 const mr = new MediaRecorder(mixedStream, { mimeType: 'video/webm' });
+                 mr.ondataavailable = e => { if (e.data.size > 0) callChunksRef.current.push(e.data); };
+                 mr.onstop = async () => {
+                     if (callChunksRef.current.length === 0) return;
+                     const blob = new Blob(callChunksRef.current, { type: 'video/webm' });
+                     callChunksRef.current = [];
+                     const reader = new FileReader();
+                     reader.onload = async () => {
+                         const b64 = reader.result as string;
+                         const msgId = 'call_' + Date.now();
+                         const db = await initDB();
+                         
+                         const msg: Message = { id: msgId, senderId: myUserId || '', text: JSON.stringify({ type: 'text', text: '📽️ Video Call Memory Saved Automatically to Vault' }), timestamp: Date.now(), status: 'sent' };
+                         await db.put('messages', msg);
+                         setMessages(prev => [...prev, msg]);
+                         
+                         // Save to Vault Locally
+                         await db.put('vault', {
+                             id: msgId, name: 'Video Call Memory', type: 'video', data: b64, timestamp: Date.now(), locked: true
+                         });
+                         
+                         // Save to Cloud Securely
+                         if (sharedKey && myUserId) {
+                             try {
+                                const enc = await encryptMessage(sharedKey, b64);
+                                await supabase.from('vault').insert([{
+                                    id: msgId, owner_id: myUserId, name: 'Video Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
+                                }]);
+                             } catch(e) { console.error('Failed call vault save', e); }
+                         }
+                     };
+                     reader.readAsDataURL(blob);
+                 };
+                 mr.start(1000);
+                 callRecorderRef.current = mr;
+              } catch(e) { console.warn('Could not auto-record call', e); }
+          }
+      };
+      
       pc.onicecandidate = (event) => {
         if (event.candidate) sendSecurePayload({ type: 'call:ice', candidate: event.candidate });
       };
@@ -700,6 +767,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const acceptCall = () => { setCallState(s => ({ ...s, incoming: false, connected: true })); setupWebRTC(callState.type, false, callState.pendingSdp); };
   const rejectCall = () => { sendSecurePayload({ type: 'call:end' }); endCallUI(); };
   const endCallUI = useCallback(() => {
+    if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
+        callRecorderRef.current.stop();
+        callRecorderRef.current = null;
+    }
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
     if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; }
     setCallState({ active: false, type: 'video', incoming: false, connected: false });
@@ -1019,8 +1090,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                 {callState.incoming ? 'Incoming Call...' : callState.connected ? 'Secure Connection' : 'Ringing...'}
               </p>
               <div className={`mt-8 relative w-11/12 max-w-sm aspect-[3/4] rounded-[32px] overflow-hidden bg-black/50 border border-white/10 shadow-2xl ${callState.type === 'video' ? 'block' : 'hidden'}`}>
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-28 h-40 bg-black/80 rounded-2xl border-2 border-white/20 object-cover shadow-xl backdrop-blur-md" />
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover transition-all duration-500" style={{ filter: videoFilter.css }} />
+                <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-28 h-40 bg-black/80 rounded-2xl border-2 border-white/20 object-cover shadow-xl backdrop-blur-md transition-all duration-500" style={{ filter: videoFilter.css }} />
+                
+                {callState.type === 'video' && callState.connected && (
+                   <div className="absolute top-4 right-4 flex flex-col space-y-2 z-50">
+                      {VIDEO_FILTERS.map(f => (
+                         <button 
+                            key={f.id} 
+                            onClick={() => setVideoFilter(f)}
+                            className={`px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase transition-all backdrop-blur-md ${videoFilter.id === f.id ? 'bg-primary text-white shadow-lg shadow-primary/30 border border-primary' : 'bg-black/50 text-white/50 border border-white/10 hover:bg-white/10'}`}
+                         >
+                            {f.label}
+                         </button>
+                      ))}
+                   </div>
+                )}
               </div>
               <div className="mt-auto flex items-center space-x-8">
                 {callState.incoming ? (
