@@ -145,43 +145,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            db.get('settings', 'main')
         ]);
         if (settings) setWallpaper(settings.wallpaper || '');
-
-  // Soundscape States
-  const [audioLevel, setAudioLevel] = useState(0);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationIdRef = useRef<number | null>(null);
-
-  const startAudioAnalysis = (audioElement: HTMLAudioElement) => {
-    try {
-      if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') ctx.resume();
-
-      const source = ctx.createMediaElementSource(audioElement);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 64; 
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
-      analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const update = () => {
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const avg = sum / dataArray.length;
-        setAudioLevel(avg / 255); // Normalize to 0-1
-        animationIdRef.current = requestAnimationFrame(update);
-      };
-      update();
-    } catch (e) { console.error('Audio analysis failed', e); }
-  };
-
-  const stopAudioAnalysis = () => {
-    if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
-    setAudioLevel(0);
-  };
         const currentMessages = history ? history.sort((a, b) => a.timestamp - b.timestamp) : [];
         setMessages(currentMessages);
 
