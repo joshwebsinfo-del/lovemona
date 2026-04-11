@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 export const SettingsScreen: React.FC = () => {
   const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
+  const [avatar, setAvatar] = useState('');
   const [theme, setTheme] = useState('passionate');
   const [wallpaper, setWallpaper] = useState('');
   const [isClearing, setIsClearing] = useState(false);
@@ -35,7 +36,10 @@ export const SettingsScreen: React.FC = () => {
     const loadSettings = async () => {
       const db = await initDB();
       const auth = await db.get('auth', 'pins');
-      if (auth) setNickname(auth.nickname);
+      if (auth) {
+        setNickname(auth.nickname);
+        if (auth.avatar) setAvatar(auth.avatar);
+      }
 
       const settings = await db.get('settings', 'main');
       if (settings) {
@@ -45,6 +49,36 @@ export const SettingsScreen: React.FC = () => {
     };
     loadSettings();
   }, []);
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.src = reader.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 800; // Good quality but small size
+        let { width, height } = img;
+        if (width > height && width > MAX_SIZE) {
+          height *= MAX_SIZE / width;
+          width = MAX_SIZE;
+        } else if (height > MAX_SIZE) {
+          width *= MAX_SIZE / height;
+          height = MAX_SIZE;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const newAvatar = canvas.toDataURL('image/jpeg', 0.8);
+        setAvatar(newAvatar);
+        saveSettings({ avatar: newAvatar });
+      };
+    };
+    reader.readAsDataURL(file);
+  };
 
   const saveSettings = async (updates: any) => {
     const db = await initDB();
@@ -57,6 +91,7 @@ export const SettingsScreen: React.FC = () => {
     if (idRes) {
        const supabaseUpdate: any = {};
        if (updates.nickname) supabaseUpdate.nickname = updates.nickname;
+       if (updates.avatar) supabaseUpdate.avatar = updates.avatar;
        if (updates.wallpaper !== undefined) supabaseUpdate.wallpaper = updates.wallpaper;
        
        if (Object.keys(supabaseUpdate).length > 0) {
@@ -67,10 +102,11 @@ export const SettingsScreen: React.FC = () => {
           }
        }
     }
-    if (updates.nickname) {
+    if (updates.nickname || updates.avatar) {
        const auth = await db.get('auth', 'pins');
        if (auth) {
-          auth.nickname = updates.nickname;
+          if (updates.nickname) auth.nickname = updates.nickname;
+          if (updates.avatar) auth.avatar = updates.avatar;
           await db.put('auth', auth);
        }
     }
@@ -131,6 +167,23 @@ export const SettingsScreen: React.FC = () => {
                   className="w-full h-14 bg-black border border-white/10 rounded-[20px] px-6 text-white font-bold focus:border-primary outline-none transition-all"
                   placeholder="The one they see..."
                 />
+             </div>
+             
+             <div className="space-y-1">
+                <p className="text-white/40 text-[11px] font-bold uppercase tracking-wider ml-1">My Avatar</p>
+                <div className="flex items-center space-x-4">
+                  <div className="w-16 h-16 rounded-full overflow-hidden bg-black border border-white/10 flex items-center justify-center shrink-0 shadow-lg relative">
+                    {avatar ? (
+                      <img src={avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={24} className="text-white/30" />
+                    )}
+                  </div>
+                  <label className="flex-1 h-12 bg-white/5 border border-white/10 text-white/80 rounded-xl flex items-center justify-center font-semibold text-sm active:scale-95 transition-all text-center cursor-pointer">
+                     Change Photo
+                     <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                  </label>
+                </div>
              </div>
           </div>
         </div>

@@ -287,6 +287,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         else if (payload.type === 'call:answer' && payload.sdp) {
           await pcRef.current?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
           setCallState(s => ({ ...s, connected: true }));
+          
+          // Process any queued ice candidates on the caller side once answer is received
+          while (iceCandidateQueue.current.length > 0) {
+            const cand = iceCandidateQueue.current.shift();
+            if (cand && pcRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+          }
         }
         else if (payload.type === 'call:ice') {
           if (payload.candidate) {
