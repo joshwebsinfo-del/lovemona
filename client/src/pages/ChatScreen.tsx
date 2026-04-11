@@ -5,7 +5,6 @@ import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2,
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
-import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
 import { LiveWallpaper } from '../components/LiveWallpaper';
 
@@ -259,16 +258,18 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
              });
              
              try {
-                const encMedia = await encryptMessage(sharedKey, payload.mediaData);
-                await supabase.from('vault').insert({
-                   id: vId,
-                   owner_id: myUserId,
-                   name: payload.text || 'Received Media',
-                   type: vType,
-                   encrypted_data: encMedia.encrypted,
-                   iv: encMedia.iv,
-                   timestamp: Date.now()
-                });
+                if (payload.mediaData) {
+                   const encMedia = await encryptMessage(sharedKey, payload.mediaData);
+                   await supabase.from('vault').insert({
+                      id: vId,
+                      owner_id: myUserId,
+                      name: payload.text || 'Received Media',
+                      type: vType,
+                      encrypted_data: encMedia.encrypted,
+                      iv: encMedia.iv,
+                      timestamp: Date.now()
+                   });
+                }
              } catch { /* ignored */ }
           }
           
@@ -277,7 +278,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         else if (payload.type === 'call:offer') {
           setCallState({ active: true, incoming: true, type: payload.callType || 'video', connected: false, pendingSdp: payload.sdp });
         }
-        else if (payload.type === 'call:answer') {
+        else if (payload.type === 'call:answer' && payload.sdp) {
           await pcRef.current?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
           setCallState(s => ({ ...s, connected: true }));
         }
@@ -414,6 +415,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
       let payload: ChatPayload;
       
+      let b64 = '';
       // If file is > 1MB, use Supabase Storage
       if (file.size > 1024 * 1024) {
          const arrayBuffer = await file.arrayBuffer();
@@ -427,12 +429,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          if (storageErr) {
             console.error('Storage upload failed:', storageErr);
             // Fallback to compressed b64 if storage fails
-            payload = { type: 'media', text: file.name, mediaType: file.type || 'image/jpeg', mediaData: await compressImage(file) };
+            b64 = await compressImage(file);
+            payload = { type: 'media', text: file.name, mediaType: file.type || 'image/jpeg', mediaData: b64 };
          } else {
             payload = { type: 'media', text: file.name, mediaType: file.type, storagePath, storageIv: ivB64 };
+            // For vault backup of large files, we still use compressed b64 for thumbnail/preview
+            b64 = await compressImage(file);
          }
       } else {
-         const b64 = file.type.startsWith('video/') 
+         b64 = file.type.startsWith('video/') 
             ? await new Promise<string>((resolve, reject) => {
                const reader = new FileReader();
                reader.onload = () => resolve(reader.result as string);
@@ -451,6 +456,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       await sendSecurePayload(payload, msgId);
 
       // Also backup image to Supabase Vault for both partners
+      if (!sharedKey) return;
       const encMedia = await encryptMessage(sharedKey, b64);
       const vType = file.type.startsWith('video') ? 'video' : 'photo';
       
@@ -619,12 +625,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       if (isInitiator) {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        sendSecurePayload({ type: 'call:offer', callType: type, sdp: pc.localDescription });
+        sendSecurePayload({ type: 'call:offer', callType: type, sdp: pc.localDescription || undefined });
       } else if (remoteSdp) {
         await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        sendSecurePayload({ type: 'call:answer', sdp: pc.localDescription });
+        sendSecurePayload({ type: 'call:answer', sdp: pc.localDescription || undefined });
       }
     } catch {
       alert('Could not set up call.');
