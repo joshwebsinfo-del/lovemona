@@ -21,24 +21,43 @@ export default defineConfig({
     tailwind(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
       manifest: {
-        name: 'SecureLove',
-        short_name: 'SecureCalc',
-        description: 'Private encrypted chat for two',
+        name: 'SecureLove – Private Messenger',
+        short_name: 'SecureLove',
+        description: 'End-to-end encrypted private chat for two',
         theme_color: '#0a0a0c',
         background_color: '#0a0a0c',
         display: 'standalone',
+        orientation: 'portrait',
+        start_url: '/',
         icons: [
           {
             src: 'pwa-192x192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any'
           },
           {
             src: 'pwa-512x512.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: 'apple-touch-icon.png',
+            sizes: '180x180',
+            type: 'image/png',
+          }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'google-fonts-cache' }
           }
         ]
       }
@@ -48,4 +67,5 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
   },
 })
+
 

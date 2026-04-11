@@ -49,6 +49,7 @@ io.on('connection', (socket) => {
     }
   }
 
+
   // ── PAIRING FLOW ──────────────────────────────────────────────────────────
   socket.on('pair:init', ({ myId }) => {
     socket.join(`pair:${myId}`);

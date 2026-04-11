@@ -40,6 +40,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [isBlurred, setIsBlurred] = useState(false); // Shoulder surfing protection
   const lastTapRef = useRef<{ id: string, time: number }>({ id: '', time: 0 });
   const [partnerOnline, setPartnerOnline] = useState(false);
+  const partnerIdRef = useRef('');
   
   // States
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
@@ -177,13 +178,17 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     }, 100);
   };
 
+  // Keep partnerIdRef in sync so closures always have the latest value
+  useEffect(() => { partnerIdRef.current = partnerInfo.userId; }, [partnerInfo.userId]);
+
   // Setup Socket listener once sharedKey is ready
   useEffect(() => {
     if (!sharedKey || !myUserId) return;
     
     const s = getSocket() || initSocket(myUserId);
     const doSubscribe = () => {
-       if (partnerInfo?.userId) s.emit('status:subscribe', { partnerId: partnerInfo.userId });
+       const pid = partnerIdRef.current;
+       if (pid) s.emit('status:subscribe', { partnerId: pid });
     };
 
     const handleStatus = (data: { isOnline: boolean }) => setPartnerOnline(data.isOnline);
@@ -284,10 +289,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           setCallState(s => ({ ...s, connected: true }));
         }
         else if (payload.type === 'call:ice') {
-          if (pcRef.current?.remoteDescription) {
-            await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
-          } else {
-            iceCandidateQueue.current.push(payload.candidate);
+          if (payload.candidate) {
+            if (pcRef.current?.remoteDescription) {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+            } else {
+              iceCandidateQueue.current.push(payload.candidate);
+            }
           }
         }
         else if (payload.type === 'call:end') {
@@ -304,7 +311,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       s.off('status:update', handleStatus);
       s.off('connect', doSubscribe);
     };
-  }, [sharedKey, myUserId]);
+  }, [sharedKey, myUserId, partnerInfo.userId]);
 
   const sendSecurePayload = async (payload: ChatPayload, messageId?: string) => {
     if (!sharedKey || !partnerInfo.userId) return;
