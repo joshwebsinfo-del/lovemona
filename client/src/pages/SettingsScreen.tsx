@@ -4,6 +4,8 @@ import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Ch
 import { useNavigate } from 'react-router-dom';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
+import { importPublicKey, deriveSharedSecret, encryptMessage } from '../lib/crypto';
+import { getSocket } from '../lib/socket';
 
 export const SettingsScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -103,11 +105,41 @@ export const SettingsScreen: React.FC = () => {
        }
     }
     if (updates.nickname || updates.avatar) {
-       const auth = await db.get('auth', 'pins');
+       const [auth, partner] = await Promise.all([
+         db.get('auth', 'pins'),
+         db.get('partner', 'partner')
+       ]);
+       
        if (auth) {
           if (updates.nickname) auth.nickname = updates.nickname;
           if (updates.avatar) auth.avatar = updates.avatar;
           await db.put('auth', auth);
+       }
+       
+       // Broadcast sync to partner
+       if (idRes && partner) {
+         try {
+           const importedPartnerKey = await importPublicKey(partner.publicKeyPem);
+           const sharedKey = await deriveSharedSecret(idRes.privateKey, importedPartnerKey);
+           
+           const payload = {
+             type: 'identity:sync',
+             nick: updates.nickname || auth?.nickname,
+             avatar: updates.avatar || auth?.avatar
+           };
+           
+           const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
+           const s = getSocket();
+           if (s && s.connected) {
+             s.emit('message:send', {
+               to: partner.userId,
+               encrypted: enc.encrypted,
+               iv: enc.iv,
+               senderId: idRes.userId,
+               messageId: `sync-${Date.now()}`
+             });
+           }
+         } catch(e) { console.error('Failed to sync identity updates', e); }
        }
     }
   };
