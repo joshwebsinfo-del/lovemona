@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2 } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Activity, Navigation } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -15,7 +15,7 @@ interface ChatScreenProps {
 interface SupabaseMessage { id: string; sender_id: string; recipient_id: string; encrypted_payload: string; iv: string; timestamp: number }
 
 interface ChatPayload {
-  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync';
+  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync' | 'location:request';
   text?: string;
   mediaType?: string;
   mediaData?: string;
@@ -32,6 +32,88 @@ interface ChatPayload {
   lng?: number;
   expiresAt?: number;
 }
+
+const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAudioAnalysis }: { 
+  pl: ChatPayload, 
+  sharedKey: CryptoKey | null, 
+  setViewMedia: (v: { url: string, type: 'photo' | 'video' } | null) => void,
+  startAudioAnalysis: (el: HTMLAudioElement) => void,
+  stopAudioAnalysis: () => void
+}) => {
+   const [src, setSrc] = React.useState(pl.mediaData || '');
+   const [loading, setLoading] = React.useState(!!pl.storagePath && !pl.mediaData);
+
+   const isImg = pl.mediaType?.startsWith('image');
+   const isAudio = pl.mediaType?.startsWith('audio');
+   const isVideo = pl.mediaType?.startsWith('video');
+
+   const match = pl.mediaType?.match(/effect=(chipmunk|deep)/);
+   const effect = match ? match[1] : null;
+   const audioRef = React.useRef<HTMLAudioElement>(null);
+
+   React.useEffect(() => {
+      if (audioRef.current && effect) {
+         (audioRef.current as any).preservesPitch = false;
+         audioRef.current.playbackRate = effect === 'chipmunk' ? 1.6 : 0.6;
+      }
+   }, [src, effect]);
+
+   React.useEffect(() => {
+      if (pl.storagePath && pl.storageIv && !src) {
+         const loadBlob = async () => {
+            try {
+               const { data, error } = await supabase.storage.from('media').download(pl.storagePath!);
+               if (error) throw error;
+               if (sharedKey) {
+                  const iv = new Uint8Array(base64ToBuffer(pl.storageIv!));
+                  const dec = await decryptBuffer(sharedKey, await data.arrayBuffer(), iv);
+                  const url = URL.createObjectURL(new Blob([dec], { type: pl.mediaType }));
+                  setSrc(url);
+               }
+            } catch (e) {
+               console.error('Failed to load storage media', e);
+            } finally {
+               setLoading(false);
+            }
+         };
+         loadBlob();
+      }
+   }, [pl, sharedKey, src]);
+
+   if (loading) return <div className="w-44 h-56 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 animate-pulse text-[10px] text-white/30 uppercase tracking-widest font-black">Decrypting...</div>;
+   if (!src) return <div className="w-44 h-56 flex items-center justify-center bg-red-500/10 rounded-xl border border-red-500/20 text-[10px] text-red-500/50 uppercase tracking-widest font-black">Media Unavailable</div>;
+
+   return (
+      <div className="flex flex-col space-y-2 relative group mt-1 mb-1">
+         {isImg && <img src={src} onClick={() => setViewMedia({ url: src, type: 'photo' })} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10 cursor-pointer transition-transform active:scale-95" alt="Shared media" />}
+         {isVideo && (
+            <div className="relative group cursor-pointer" onClick={() => setViewMedia({ url: src, type: 'video' })}>
+               <video src={src} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10" />
+               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-xl transition-opacity">
+                  <span className="text-white bg-black/50 p-2 rounded-full font-bold">⤢</span>
+               </div>
+            </div>
+         )}
+         {isAudio && (
+            <div className="flex items-center space-x-3 bg-white/10 py-2 px-3 rounded-xl border border-white/10">
+               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${effect === 'chipmunk' ? 'bg-fuchsia-500/20 text-fuchsia-500' : effect === 'deep' ? 'bg-indigo-600/20 text-indigo-400' : 'bg-primary/20 text-primary'}`}>
+                  {effect ? <Wand2 size={16} /> : <Volume2 size={16} />}
+               </div>
+               <audio 
+                  ref={audioRef} 
+                  src={src} 
+                  controls 
+                  onPlay={() => startAudioAnalysis(audioRef.current!)} 
+                  onPause={stopAudioAnalysis} 
+                  onEnded={stopAudioAnalysis}
+                  className="h-8 w-[150px]" 
+               />
+            </div>
+         )}
+         {!isImg && !isAudio && !isVideo && <span className="underline italic text-white/50">Unsupported media</span>}
+      </div>
+   );
+};
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -92,15 +174,23 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationIdRef = useRef<number | null>(null);
 
+  const audioSourceMap = useRef<Map<HTMLAudioElement, MediaElementAudioSourceNode>>(new Map());
+
   const startAudioAnalysis = (audioElement: HTMLAudioElement) => {
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') ctx.resume();
 
-      const source = ctx.createMediaElementSource(audioElement);
+      let source = audioSourceMap.current.get(audioElement);
+      if (!source) {
+        source = ctx.createMediaElementSource(audioElement);
+        audioSourceMap.current.set(audioElement, source);
+      }
+      
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64; 
+      source.disconnect(); // Disconnect existing paths
       source.connect(analyser);
       analyser.connect(ctx.destination);
       analyserRef.current = analyser;
@@ -111,7 +201,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         let sum = 0;
         for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
         const avg = sum / dataArray.length;
-        setAudioLevel(avg / 255); // Normalize to 0-1
+        setAudioLevel(avg / 255); 
         animationIdRef.current = requestAnimationFrame(update);
       };
       update();
@@ -277,6 +367,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            return;
         }
         
+        if (payload.type === 'location:request') {
+           const doShare = confirm(`${partnerInfo.nick} requested your live location. Share for 1 hour?`);
+           if (doShare) handleLocationDrop(1);
+           return;
+        }
+
         if (payload.type === 'identity:sync') {
            setPartnerInfo(prev => ({ ...prev, nick: payload.nick || prev.nick, avatar: payload.avatar || prev.avatar }));
            // Better to just db.get then db.put
@@ -864,73 +960,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         const isAudio = payload.mediaType?.startsWith('audio');
         const isVideo = payload.mediaType?.startsWith('video');
 
-        // NEW: Inline storage downloader component
-        const MediaWrapper = ({ pl }: { pl: ChatPayload }) => {
-           const [src, setSrc] = React.useState(pl.mediaData || '');
-           const [loading, setLoading] = React.useState(!!pl.storagePath && !pl.mediaData);
-
-           const match = pl.mediaType?.match(/effect=(chipmunk|deep)/);
-           const effect = match ? match[1] : null;
-           const audioRef = React.useRef<HTMLAudioElement>(null);
-           React.useEffect(() => {
-              if (audioRef.current && effect) {
-                 (audioRef.current as any).preservesPitch = false;
-                 audioRef.current.playbackRate = effect === 'chipmunk' ? 1.6 : 0.6;
-              }
-           }, [src, effect]);
-
-           React.useEffect(() => {
-              if (pl.storagePath && pl.storageIv && !src) {
-                 const loadBlob = async () => {
-                    try {
-                       const { data, error } = await supabase.storage.from('media').download(pl.storagePath!);
-                       if (error) throw error;
-                       if (sharedKey) {
-                          const iv = new Uint8Array(base64ToBuffer(pl.storageIv!));
-                          const dec = await decryptBuffer(sharedKey, await data.arrayBuffer(), iv);
-                          const url = URL.createObjectURL(new Blob([dec], { type: pl.mediaType }));
-                          setSrc(url);
-                       }
-                    } catch (e) {
-                       console.error('Failed to load storage media', e);
-                    } finally {
-                       setLoading(false);
-                    }
-                 };
-                 loadBlob();
-              }
-           }, [pl]);
-
-           if (loading) return <div className="w-44 h-56 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 animate-pulse text-[10px] text-white/30 uppercase tracking-widest font-black">Decrypting...</div>;
-           if (!src) return <div className="w-44 h-56 flex items-center justify-center bg-red-500/10 rounded-xl border border-red-500/20 text-[10px] text-red-500/50 uppercase tracking-widest font-black">Media Unavailable</div>;
-
-           return (
-              <div className="flex flex-col space-y-2 relative group mt-1 mb-1">
-                 {isImg && <img src={src} onClick={() => setViewMedia({ url: src, type: 'photo' })} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10 cursor-pointer transition-transform active:scale-95" alt="Shared media" />}
-                 {isVideo && (
-                    <div className="relative group cursor-pointer" onClick={() => setViewMedia({ url: src, type: 'video' })}>
-                       <video src={src} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10" />
-                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-xl transition-opacity">
-                          <span className="text-white bg-black/50 p-2 rounded-full font-bold">⤢</span>
-                       </div>
-                    </div>
-                 )}
-                 {isAudio && (
-                    <div className="flex items-center space-x-3 bg-white/10 py-2 px-3 rounded-xl border border-white/10">
-                       <div className={`w-8 h-8 rounded-full flex items-center justify-center ${effect === 'chipmunk' ? 'bg-fuchsia-500/20 text-fuchsia-500' : effect === 'deep' ? 'bg-indigo-600/20 text-indigo-400' : 'bg-primary/20 text-primary'}`}>
-                          {effect ? <Wand2 size={16} /> : <Volume2 size={16} />}
-                       </div>
-                       <audio ref={audioRef} src={src} controls className="h-8 w-[150px]" onPlay={() => startAudioAnalysis(audioRef.current!)} onPause={stopAudioAnalysis} onEnded={stopAudioAnalysis} />
-                    </div>
-                 )}
-                 {!isImg && !isAudio && !isVideo && <span className="underline italic text-white/50">Unsupported media</span>}
-              </div>
-           );
-        };
-
-        return <MediaWrapper pl={payload} />;
-      }
-      if (payload.type === 'location' && payload.lat && payload.lng) {
+         return <MediaWrapper 
+           pl={payload} 
+           sharedKey={sharedKey} 
+           setViewMedia={setViewMedia} 
+           startAudioAnalysis={startAudioAnalysis} 
+           stopAudioAnalysis={stopAudioAnalysis} 
+         />;
+       }
+       if (payload.type === 'location' && payload.lat && payload.lng) {
         const isExpired = payload.expiresAt && Date.now() > payload.expiresAt;
         return (
           <div className="flex flex-col space-y-2 w-[220px]">
@@ -1016,6 +1054,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }}
                   className="absolute right-0 top-10 w-44 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden"
                 >
+                    <button onClick={() => { sendSecurePayload({ type: 'location:request' }); setShowMenu(false); }} className="w-full text-left px-4 py-2 text-white text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5 flex items-center justify-between">
+                      Ping Location <MapPin size={14} className="text-primary" />
+                    </button>
                     <button onClick={clearChat} className="w-full text-left px-4 py-2 text-red-400 text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5">
                       Clear History
                     </button>
@@ -1134,10 +1175,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                       </button>
                       <AnimatePresence>
                          {showLocationMenu && (
-                            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-44 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
-                               <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">15 Mins</button>
-                               <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">1 Hour</button>
-                               <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest">8 Hours</button>
+                            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
+                               <p className="text-[10px] text-white/30 uppercase tracking-widest font-black px-3 py-1">Share Your Spot</p>
+                               <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">15 Mins <Navigation size={12} className="opacity-40" /></button>
+                               <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">1 Hour <Navigation size={12} className="opacity-40" /></button>
+                               <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">8 Hours <Navigation size={12} className="opacity-40" /></button>
                             </motion.div>
                          )}
                       </AnimatePresence>
