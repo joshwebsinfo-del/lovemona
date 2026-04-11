@@ -15,7 +15,7 @@ interface ChatScreenProps {
 interface SupabaseMessage { id: string; sender_id: string; recipient_id: string; encrypted_payload: string; iv: string; timestamp: number }
 
 interface ChatPayload {
-  type: 'text' | 'media' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync';
+  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync';
   text?: string;
   mediaType?: string;
   mediaData?: string;
@@ -28,6 +28,8 @@ interface ChatPayload {
   avatar?: string;
   storagePath?: string;
   storageIv?: string;
+  lat?: number;
+  lng?: number;
 }
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
@@ -423,9 +425,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         setIsProcessingMedia(false);
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        const mapUrl = `https://www.google.com/maps?q=${lat},${lng}`;
         
-        const payload: ChatPayload = { type: 'text', text: `📍 I'm checking in right here:\n${mapUrl}\n\nSafe and sound. ❤️` };
+        const payload: ChatPayload = { type: 'location', lat, lng, text: `📍 Live Check-In` };
         const msgId = Date.now().toString();
         
         const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
@@ -858,6 +859,30 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         };
 
         return <MediaWrapper pl={payload} />;
+      }
+      if (payload.type === 'location' && payload.lat && payload.lng) {
+        return (
+          <div className="flex flex-col space-y-2 w-[200px]">
+            <p className="text-[13px] font-bold text-white mb-0.5 tracking-tight flex items-center">
+               <MapPin size={14} className="text-primary mr-1" /> Live Check-In
+            </p>
+            <div className="rounded-xl overflow-hidden shadow-lg border border-white/10 h-36 w-full cursor-pointer relative group"
+                 onClick={() => window.open(`https://www.google.com/maps?q=${payload.lat},${payload.lng}`, '_blank')}>
+               <iframe 
+                 src={`https://www.openstreetmap.org/export/embed.html?bbox=${payload.lng-0.005}%2C${payload.lat-0.005}%2C${payload.lng+0.005}%2C${payload.lat+0.005}&layer=mapnik&marker=${payload.lat}%2C${payload.lng}`}
+                 className="w-full h-full pointer-events-none"
+                 style={{ border: 0 }}
+                 scrolling="no"
+               />
+               <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors flex items-center justify-center pointer-events-none">
+                  <div className="bg-primary/90 text-white rounded-full p-2 shadow-lg backdrop-blur-sm group-hover:scale-110 transition-transform">
+                     <MapPin size={24} />
+                  </div>
+               </div>
+            </div>
+            <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to open in Maps</p>
+          </div>
+        );
       }
       return <p className="text-[15px] leading-relaxed break-words">{payload.text}</p>;
     } catch {
