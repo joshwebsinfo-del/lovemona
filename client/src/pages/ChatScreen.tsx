@@ -420,9 +420,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       if (file.size > 1024 * 1024) {
          const arrayBuffer = await file.arrayBuffer();
          if (!sharedKey) throw new Error("No shared key");
-         const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
+         const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer as any);
          const storagePath = `media/${myUserId}/${msgId}_${file.name}`;
-         const ivB64 = bufferToBase64(iv.buffer);
+         const ivB64 = bufferToBase64(iv.buffer as any);
 
          // Upload encrypted blob to storage
          const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encrypted);
@@ -518,32 +518,34 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           await sendSecurePayload(payload, msgId);
 
           // Backup voice to vault cloud for both partners
-          const encMedia = await encryptMessage(sharedKey, b64);
-          
-          await db.put('vault', {
-             id: msgId + '_me', name: 'Voice Note', type: 'voice', data: b64, timestamp: Date.now(), locked: true
-          });
-          
-          await supabase.from('vault').insert([
-             {
-                id: msgId + '_me', 
-                owner_id: myUserId, 
-                name: 'Voice Note', 
-                type: 'voice', 
-                encrypted_data: encMedia.encrypted, 
-                iv: encMedia.iv,
-                timestamp: Date.now()
-             },
-             {
-                id: msgId + '_partner', 
-                owner_id: partnerInfo.userId, 
-                name: 'Voice Note', 
-                type: 'voice', 
-                encrypted_data: encMedia.encrypted, 
-                iv: encMedia.iv,
-                timestamp: Date.now()
-             }
-          ]);
+          if (sharedKey) {
+            const encMedia = await encryptMessage(sharedKey, b64);
+            
+            await db.put('vault', {
+               id: msgId + '_me', name: 'Voice Note', type: 'voice', data: b64, timestamp: Date.now(), locked: true
+            });
+            
+            await supabase.from('vault').insert([
+               {
+                  id: msgId + '_me', 
+                  owner_id: myUserId, 
+                  name: 'Voice Note', 
+                  type: 'voice', 
+                  encrypted_data: encMedia.encrypted, 
+                  iv: encMedia.iv,
+                  timestamp: Date.now()
+               },
+               {
+                  id: msgId + '_partner', 
+                  owner_id: partnerInfo.userId, 
+                  name: 'Voice Note', 
+                  type: 'voice', 
+                  encrypted_data: encMedia.encrypted, 
+                  iv: encMedia.iv,
+                  timestamp: Date.now()
+               }
+            ]);
+          }
         };
         reader.readAsDataURL(audioBlob);
         stream.getTracks().forEach(t => t.stop());

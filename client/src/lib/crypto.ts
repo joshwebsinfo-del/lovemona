@@ -124,32 +124,34 @@ export async function decryptMessage(
 
 export async function encryptBuffer(
   sharedKey: CryptoKey,
-  buffer: ArrayBuffer
+  buffer: ArrayBuffer | ArrayBufferLike
 ): Promise<{ encrypted: ArrayBuffer; iv: Uint8Array }> {
   const iv = window.crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await window.crypto.subtle.encrypt(
     {
       name: "AES-GCM",
-      iv: iv,
+      iv: iv as any,
     },
     sharedKey,
-    buffer
+    buffer as any
   );
-  return { encrypted, iv };
+  return { encrypted: encrypted as ArrayBuffer, iv };
 }
 
 export async function decryptBuffer(
   sharedKey: CryptoKey,
-  encryptedBuffer: ArrayBuffer,
+  encryptedBuffer: ArrayBuffer | ArrayBufferLike,
   iv: Uint8Array
 ): Promise<ArrayBuffer> {
-  return await window.crypto.subtle.decrypt(
+  const decrypted = await window.crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv: iv,
+      iv: iv as any,
     },
     sharedKey,
-    encryptedBuffer
+    encryptedBuffer as any
   );
+  return decrypted as ArrayBuffer;
 }
+
 
