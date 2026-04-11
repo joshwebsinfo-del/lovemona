@@ -28,7 +28,7 @@ const BottomNav = () => {
   ];
 
   // Don't show nav on these paths or in fake mode
-  const hidePaths = ['/panic', '/lock', '/setup', '/pin-setup'];
+  const hidePaths = ['/chat', '/panic', '/lock', '/setup', '/pin-setup'];
   if (hidePaths.includes(location.pathname)) return null;
 
   return (
