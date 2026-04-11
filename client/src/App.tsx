@@ -1,9 +1,7 @@
-
-
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Shield, AlertTriangle, User } from 'lucide-react';
+import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
 import { DashboardScreen } from './pages/DashboardScreen';
 import { ChatScreen } from './pages/ChatScreen';
 import { VaultScreen } from './pages/VaultScreen';
@@ -23,27 +21,68 @@ const BottomNav = () => {
   const location = useLocation();
 
   const navItems = [
-    { id: 'home',  label: 'Hub',   icon: User,           path: '/' },
+    { id: 'home',  label: 'Home',  icon: Home,     path: '/' },
     { id: 'chat',  label: 'Chat',  icon: MessageCircle,  path: '/chat' },
-    { id: 'vault', label: 'Vault', icon: Shield,         path: '/vault' },
-    { id: 'panic', label: 'Panic', icon: AlertTriangle,  path: '/panic' },
+    { id: 'vault', label: 'Vault', icon: Lock,     path: '/vault' },
+    { id: 'settings', label: 'Setup', icon: Settings, path: '/settings' },
   ];
 
+  // Don't show nav on these paths or in fake mode
+  const hidePaths = ['/panic', '/lock', '/setup', '/pin-setup'];
+  if (hidePaths.includes(location.pathname)) return null;
+
   return (
-    <div className="glass fixed bottom-0 w-full h-20 px-6 flex items-center justify-around z-30">
-      {navItems.map(({ id, label, icon: Icon, path }) => {
-        const active = location.pathname === path;
-        return (
-          <button
-            key={id}
-            onClick={() => navigate(path)}
-            className={`flex flex-col items-center space-y-1 transition-all ${active ? 'text-primary scale-110' : 'text-white/40'}`}
-          >
-            <Icon size={24} strokeWidth={active ? 2.5 : 2} />
-            <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
-          </button>
-        );
-      })}
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm">
+      <div className="bg-[#121214]/80 backdrop-blur-3xl border border-white/5 rounded-[40px] h-[72px] px-2 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+        
+        {/* SLIDING INDICATOR */}
+        <AnimatePresence>
+          {navItems.map((item, i) => {
+            const active = location.pathname === item.path;
+            if (!active) return null;
+            return (
+              <motion.div
+                key="indicator"
+                layoutId="nav-indicator"
+                initial={false}
+                transition={{ type: 'spring', stiffness: 350, damping: 35 }}
+                className="absolute h-14 bg-white/5 rounded-[32px] border border-white/10"
+                style={{ 
+                  width: `calc(100% / ${navItems.length} - 12px)`,
+                  left: `calc((${i} * (100% / ${navItems.length})) + 6px)` 
+                }}
+              />
+            );
+          })}
+        </AnimatePresence>
+
+        {navItems.map(({ id, label, icon: Icon, path }) => {
+          const active = location.pathname === path;
+          return (
+            <button
+              key={id}
+              onClick={() => navigate(path)}
+              className="flex-1 relative z-10 flex flex-col items-center justify-center space-y-1 group"
+            >
+              <motion.div
+                animate={{ 
+                  scale: active ? [1, 1.2, 1.1] : 1,
+                  y: active ? -2 : 0
+                }}
+              >
+                <Icon 
+                  size={20} 
+                  strokeWidth={active ? 2.5 : 1.5} 
+                  className={`transition-colors duration-300 ${active ? 'text-primary' : 'text-white/30 group-hover:text-white/60'}`} 
+                />
+              </motion.div>
+              <span className={`text-[9px] font-black uppercase tracking-[1px] transition-colors duration-300 ${active ? 'text-white' : 'text-white/30'}`}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 };

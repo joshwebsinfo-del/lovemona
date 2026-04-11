@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Camera, Lock, Heart, Activity, Settings, ShieldAlert } from 'lucide-react';
+import { MessageCircle, Lock, Heart, Activity, Settings } from 'lucide-react';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, decryptMessage } from '../lib/crypto';
@@ -208,63 +208,95 @@ export const DashboardScreen: React.FC = () => {
             </div>
          </motion.div>
 
-         <div className="text-center">
-            <h1 className="text-3xl font-black text-white tracking-tighter uppercase mb-0.5">{partner?.nick || 'Partner'}</h1>
-            <p className="text-white/30 text-[10px] font-black uppercase tracking-[4px]">
-               {isTyping ? 'Whispering secrets...' : (isOnline ? 'Active Spirit' : 'Sleeping Spirit')}
-            </p>
-         </div>
+          <div className="text-center relative">
+             <motion.h1 
+               initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+               className="text-4xl font-black text-white tracking-tighter uppercase mb-1 drop-shadow-2xl"
+             >
+               {partner?.nick || 'Partner'}
+             </motion.h1>
+             <motion.div 
+               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+               className="flex items-center justify-center space-x-2"
+             >
+                <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : 'bg-white/20'}`} />
+                <p className="text-white/40 text-[11px] font-black uppercase tracking-[3px]">
+                   {isTyping ? 'Whispering secrets...' : (isOnline ? 'Active' : 'Offline')}
+                </p>
+             </motion.div>
+          </div>
       </div>
 
-      {/* ACTION TRAY - COMPACT */}
-      <div className="pb-16 px-8 flex flex-col space-y-4 z-20">
+      {/* ACTION TRAY - PREMIUM CARDS */}
+      <div className="pb-32 px-6 flex flex-col space-y-4 z-20">
          
          <div className="grid grid-cols-2 gap-4">
             <motion.button 
-               whileTap={{ scale: 0.96 }}
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
                onClick={() => navigate('/chat')}
-               className="col-span-2 h-20 rounded-[32px] bg-white text-black flex items-center justify-between px-7 shadow-2xl relative overflow-hidden group"
+               className="col-span-2 h-24 rounded-[32px] bg-white text-black flex items-center justify-between px-8 shadow-[0_20px_40px_rgba(0,0,0,0.3)] relative overflow-hidden group"
             >
-               <div className="absolute right-0 top-0 p-5 opacity-[0.03] group-hover:rotate-12 transition-transform">
-                  <MessageCircle size={90} />
+               <div className="absolute right-[-10%] top-[-10%] p-5 opacity-[0.05] group-hover:rotate-12 group-hover:scale-110 transition-all duration-500">
+                  <MessageCircle size={120} />
                </div>
-               <div className="flex flex-col text-left">
-                  <span className="text-xl font-black tracking-tighter leading-none mb-1">OUR WORLD</span>
-                  <span className="text-[9px] font-bold uppercase tracking-widest opacity-40">Messages & Taps</span>
+               <div className="flex flex-col text-left relative z-10">
+                  <span className="text-2xl font-black tracking-tighter leading-none mb-1 text-black">OUR WORLD</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[2px] opacity-40">Private connection</span>
                </div>
-               <div className="relative">
-                  <div className="w-10 h-10 bg-black rounded-2xl flex items-center justify-center text-white shadow-inner">
-                     <MessageCircle size={18} />
+               <div className="relative z-10">
+                  <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white shadow-xl group-hover:bg-primary transition-colors">
+                     <MessageCircle size={22} />
                   </div>
-                  {unreadCount > 0 && (
-                     <div className="absolute -top-2 -right-2 bg-primary text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-lg animate-bounce">
-                        {unreadCount}
-                     </div>
-                  )}
+                  <AnimatePresence>
+                    {unreadCount > 0 && (
+                       <motion.div 
+                         initial={{ scale: 0 }} animate={{ scale: 1 }}
+                         className="absolute -top-2 -right-2 bg-primary text-white w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black border-[3px] border-white shadow-lg"
+                       >
+                          {unreadCount}
+                       </motion.div>
+                    )}
+                  </AnimatePresence>
                </div>
             </motion.button>
 
             <motion.button 
-               whileTap={{ scale: 0.96 }}
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
                onClick={() => navigate('/vault')}
-               className="h-16 rounded-[28px] bg-zinc-900 border border-white/5 flex items-center justify-center space-x-2 px-4 shadow-xl active:bg-zinc-800 transition-colors"
+               className="h-32 rounded-[32px] bg-[#1a1a1c] border border-white/5 flex flex-col items-start justify-between p-6 shadow-xl relative overflow-hidden group"
             >
-               <Camera size={18} className="text-primary/70" />
-               <span className="text-[11px] font-black text-white/80 tracking-widest uppercase">Vault</span>
+               <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary/20 transition-colors">
+                  <Lock size={20} />
+               </div>
+               <div className="text-left">
+                  <h3 className="text-white font-black text-[13px] tracking-widest uppercase">Vault</h3>
+                  <p className="text-white/30 text-[9px] uppercase font-bold tracking-wider">Secured</p>
+               </div>
+               <div className="absolute right-[-5%] bottom-[-5%] opacity-[0.02] group-hover:scale-110 transition-transform">
+                  <Lock size={60} />
+               </div>
             </motion.button>
 
             <motion.button 
-               whileTap={{ scale: 0.96 }}
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
                onClick={() => {
                   getSocket()?.emit('message:send', { to: partner?.userId, encrypted: 'tug', iv: 'tug', senderId: 'me' });
-                  if (navigator.vibrate) navigator.vibrate([10]);
+                  if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
                }}
-               className={`h-16 rounded-[28px] border flex items-center justify-center space-x-2 px-4 shadow-xl transition-all duration-500 ${isTugging ? 'bg-primary border-primary' : 'bg-white/5 border-white/5'}`}
+               className={`h-32 rounded-[32px] border flex flex-col items-start justify-between p-6 shadow-xl relative overflow-hidden transition-all duration-500 ${isTugging ? 'bg-primary border-primary' : 'bg-[#1a1a1c] border-white/5'}`}
             >
-               <ShieldAlert size={18} className={isTugging ? 'text-white' : 'text-primary/70'} />
-               <span className={`text-[11px] font-black uppercase tracking-widest ${isTugging ? 'text-white' : 'text-white/40'}`}>
-                  {isTugging ? 'Love Tap' : 'Tug'}
-               </span>
+               <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isTugging ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'}`}>
+                  <Heart size={20} className={isTugging ? 'animate-ping' : ''} />
+               </div>
+               <div className="text-left">
+                  <h3 className={`font-black text-[13px] tracking-widest uppercase ${isTugging ? 'text-white' : 'text-white'}`}>
+                    {isTugging ? 'Being Loved' : 'Love Tap'}
+                  </h3>
+                  <p className={`text-[9px] uppercase font-bold tracking-wider ${isTugging ? 'text-white/60' : 'text-white/30'}`}>Presence</p>
+               </div>
             </motion.button>
          </div>
 
