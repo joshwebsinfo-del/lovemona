@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Activity, Navigation } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Navigation } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -956,10 +956,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     try {
       const payload: ChatPayload = JSON.parse(msgContent);
       if (payload.type === 'media') {
-        const isImg = payload.mediaType?.startsWith('image');
-        const isAudio = payload.mediaType?.startsWith('audio');
-        const isVideo = payload.mediaType?.startsWith('video');
-
          return <MediaWrapper 
            pl={payload} 
            sharedKey={sharedKey} 
