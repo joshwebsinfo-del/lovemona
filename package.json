@@ -1,0 +1,13 @@
+{
+  "name": "securelove-monolith",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "build": "cd client && npm install && npm run build && cd ../server && npm install",
+    "install-all": "npm install && cd client && npm install && cd ../server && npm install"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0"
+  }
+}
