@@ -19,7 +19,6 @@ import { decryptMessage, encryptMessage, deriveSharedSecret, importPublicKey } f
 
 // ──────────────────────────────────────────────
 // Bottom navigation
-// ──────────────────────────────────────────────
 const BottomNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,10 +47,7 @@ const BottomNav = () => {
                 initial={false}
                 transition={{ type: 'spring', stiffness: 350, damping: 35 }}
                 className="absolute h-14 bg-white/5 rounded-[32px] border border-white/10"
-                style={{ 
-                  width: `calc(100% / ${navItems.length} - 12px)`,
-                  left: `calc((${i} * (100% / ${navItems.length})) + 6px)` 
-                }}
+                style={{ width: `calc(100% / ${navItems.length} - 12px)`, left: `calc((${i} * (100% / ${navItems.length})) + 6px)` }}
               />
             );
           })}
@@ -60,11 +56,7 @@ const BottomNav = () => {
         {navItems.map(({ id, label, icon: Icon, path }) => {
           const active = location.pathname === path;
           return (
-            <button
-              key={id}
-              onClick={() => navigate(path)}
-              className="flex-1 relative z-10 flex flex-col items-center justify-center space-y-1 group"
-            >
+            <button key={id} onClick={() => navigate(path)} className="flex-1 relative z-10 flex flex-col items-center justify-center space-y-1 group">
               <motion.div animate={{ scale: active ? [1, 1.2, 1.1] : 1, y: active ? -2 : 0 }}>
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.5} className={`transition-colors duration-300 ${active ? 'text-primary' : 'text-white/30 group-hover:text-white/60'}`} />
               </motion.div>
@@ -110,6 +102,15 @@ const AppContent = () => {
   const [callPendingSdp, setCallPendingSdp] = useState<any>(null);
   const [callDuration, setCallDuration] = useState(0);
 
+  // ── Call Extended Feature States ──
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [localFilterIndex, setLocalFilterIndex] = useState(0);
+  const [remoteFilter, setRemoteFilter] = useState('none');
+  const [reactions, setReactions] = useState<{id: string, emoji: string, x: number}[]>([]);
+  const [videoUpgradeRequested, setVideoUpgradeRequested] = useState(false);
+
+  const FILTERS = ['none', 'grayscale(100%)', 'sepia(80%)', 'saturate(200%)', 'hue-rotate(90deg)', 'contrast(150%)', 'invert(100%)'];
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -137,12 +138,7 @@ const AppContent = () => {
     const load = async () => {
       try {
         const db = await initDB();
-        const [config, p, identity] = await Promise.all([
-          db.get('auth', 'pins'),
-          db.get('partner', 'partner'),
-          db.get('identity', 'me')
-        ]);
-
+        const [config, p, identity] = await Promise.all([ db.get('auth', 'pins'), db.get('partner', 'partner'), db.get('identity', 'me') ]);
         if (config) setAppConfig(config);
         if (p) {
           setPartner(p);
@@ -162,10 +158,7 @@ const AppContent = () => {
   // ── Visibility + Global call initiation ──
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-         const s = getSocket();
-         if (s && !s.connected) s.connect();
-      }
+      if (document.visibilityState === 'visible') { const s = getSocket(); if (s && !s.connected) s.connect(); }
     };
 
     const handleGlobalCallStart = (e: CustomEvent) => {
@@ -176,7 +169,11 @@ const AppContent = () => {
        setCallIncoming(false);
        setCallConnected(false);
        setCallPendingSdp(null);
-       setupWebRTC(type || 'video', true);
+       setFacingMode('user');
+       setLocalFilterIndex(0);
+       setRemoteFilter('none');
+       setVideoUpgradeRequested(false);
+       setupWebRTC(type || 'video', true, undefined, 'user');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -198,19 +195,38 @@ const AppContent = () => {
        try {
           const dec = await decryptMessage(sharedKey, data.encrypted, data.iv);
           const payload = JSON.parse(dec);
+          
           if (payload.type === 'call:offer') {
-             setCallActive(true);
-             setCallType(payload.callType || 'video');
-             setCallIncoming(true);
-             setCallConnected(false);
-             setCallPendingSdp(payload.sdp);
-          } else if (payload.type === 'call:answer') {
-             if (pcRef.current) {
-                await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-                while (iceCandidateQueue.current.length > 0) {
-                   const cand = iceCandidateQueue.current.shift();
-                   await pcRef.current.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-                }
+             if (callActive) { // Mid-call renegotiation!
+               if (pcRef.current) {
+                  await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                  // If it upgraded to video, our side needs to turn on video too!
+                  if (payload.callType === 'video' && callType === 'voice') {
+                    setCallType('video');
+                    await acquireVideoTrack('user');
+                  }
+                  const answer = await pcRef.current.createAnswer();
+                  let sdp = answer.sdp;
+                  if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
+                  await pcRef.current.setLocalDescription({ ...answer, sdp });
+                  const enc = await encryptMessage(sharedKey, JSON.stringify({type:'call:answer', sdp: pcRef.current.localDescription}));
+                  getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+               }
+             } else {
+               setCallActive(true);
+               setCallType(payload.callType || 'video');
+               setCallIncoming(true);
+               setCallConnected(false);
+               setCallPendingSdp(payload.sdp);
+               setLocalFilterIndex(0);
+               setRemoteFilter('none');
+               setVideoUpgradeRequested(false);
+             }
+          } else if (payload.type === 'call:answer' && pcRef.current) {
+             await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+             while (iceCandidateQueue.current.length > 0) {
+                const cand = iceCandidateQueue.current.shift();
+                await pcRef.current.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
              }
              setCallConnected(true);
           } else if (payload.type === 'call:ice') {
@@ -218,12 +234,35 @@ const AppContent = () => {
                 await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
              } else { iceCandidateQueue.current.push(payload.candidate); }
           } else if (payload.type === 'call:end') { endCallUI(); }
+          
+          // Extended features handling
+          else if (payload.type === 'call:reaction') {
+             const r = { id: Math.random().toString(), emoji: payload.emoji, x: Math.random() * 80 + 10 };
+             setReactions(prev => [...prev, r]);
+             setTimeout(() => setReactions(prev => prev.filter(p => p.id !== r.id)), 3000);
+          } else if (payload.type === 'call:filter') {
+             setRemoteFilter(payload.filter);
+          } else if (payload.type === 'call:upgrade_request') {
+             setVideoUpgradeRequested(true);
+          } else if (payload.type === 'call:upgrade_accept') {
+             // Partner accepted! Turn on my camera and renegotiate
+             setCallType('video');
+             await acquireVideoTrack('user');
+             if (pcRef.current) {
+                const offer = await pcRef.current.createOffer();
+                await pcRef.current.setLocalDescription(offer);
+                const enc = await encryptMessage(sharedKey, JSON.stringify({type:'call:offer', callType: 'video', sdp: pcRef.current.localDescription}));
+                getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+             }
+          } else if (payload.type === 'call:upgrade_decline') {
+             setVideoUpgradeRequested(false);
+          }
        } catch {}
     };
 
     s.on('message:receive', handleReceive);
     return () => { s.off('message:receive', handleReceive); };
-  }, [sharedKey]);
+  }, [sharedKey, callActive, callType]);
 
   // ── Call side-effects (ringtone, wake lock, timer) ──
   useEffect(() => {
@@ -231,11 +270,8 @@ const AppContent = () => {
        if ('wakeLock' in navigator) (navigator as any).wakeLock.request('screen').then((lock: any) => { wakeLockRef.current = lock; }).catch(() => {});
        if (callIncoming) {
           ringtoneSound.current?.play().catch(() => {});
-          // SAFELY check for Notification support before using it
           if ('Notification' in window && window.Notification && window.Notification.permission === 'granted') {
-             try {
-               new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any);
-             } catch(e) { console.warn('Failed to show notification', e); }
+             try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
           }
        } else {
           ringtoneSound.current?.pause();
@@ -251,6 +287,8 @@ const AppContent = () => {
        if (callDurationTimerRef.current) { clearInterval(callDurationTimerRef.current); callDurationTimerRef.current = null; }
        if (wakeLockRef.current) { if (wakeLockRef.current.release) wakeLockRef.current.release(); wakeLockRef.current = null; }
        setCallDuration(0);
+       setReactions([]);
+       setVideoUpgradeRequested(false);
     }
   }, [callActive, callIncoming, callConnected]);
 
@@ -270,12 +308,44 @@ const AppContent = () => {
     iceCandidateQueue.current = [];
   };
 
+  // ── Camera management ──
+  const acquireVideoTrack = async (mode: 'user' | 'environment') => {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: mode, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 60, min: 30 } } 
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+
+      if (!localStreamRef.current) {
+         localStreamRef.current = new MediaStream([newVideoTrack]);
+      } else {
+         const oldTrack = localStreamRef.current.getVideoTracks()[0];
+         if (oldTrack) {
+            localStreamRef.current.removeTrack(oldTrack);
+            oldTrack.stop();
+         }
+         localStreamRef.current.addTrack(newVideoTrack);
+      }
+      
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+      
+      if (pcRef.current) {
+         const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
+         if (sender) sender.replaceTrack(newVideoTrack);
+         else pcRef.current.addTrack(newVideoTrack, localStreamRef.current);
+      }
+      return newVideoTrack;
+    } catch (e) {
+      console.warn("Failed to acquire video track", e);
+    }
+  };
+
   // ── WebRTC setup ──
-  const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
+  const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any, mode: 'user' | 'environment' = 'user') => {
     iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: type === 'video' ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
+          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 60, min: 30 } } : false, 
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
        });
        localStreamRef.current = stream;
@@ -284,9 +354,7 @@ const AppContent = () => {
        const pc = new RTCPeerConnection({ 
           iceServers: [
              { urls: 'stun:stun.l.google.com:19302' },
-             { urls: 'stun:stun1.l.google.com:19302' },
-             { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-             { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
+             { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" }
           ] 
        });
        pcRef.current = pc;
@@ -295,24 +363,20 @@ const AppContent = () => {
        pc.ontrack = (e) => { 
           if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; 
 
-          // Mixed Recording Logic (Both Devices)
+          // Mixed Recording Logic (High Quality)
           if (!callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
              try {
                 const remoteStream = e.streams[0];
-                const mixedStream = new MediaStream([
-                   ...remoteStream.getTracks(),
-                   ...stream.getAudioTracks() // Mix my audio with their stream
-                ]);
+                const mixedStream = new MediaStream([ ...remoteStream.getTracks(), ...stream.getAudioTracks() ]);
                 callChunksRef.current = [];
                 
-                // Compatibility for different browsers (VP9 -> VP8 -> Default)
                 let selectedMime = 'video/webm;codecs=vp8,opus';
                 if (!(window as any).MediaRecorder || !(window as any).MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(selectedMime)) {
                    selectedMime = 'video/mp4;codecs=avc1,mp4a.40.2';
                 }
-                if (selectedMime && !MediaRecorder.isTypeSupported(selectedMime)) selectedMime = ''; // browser default
+                if (selectedMime && !MediaRecorder.isTypeSupported(selectedMime)) selectedMime = '';
 
-                const mr = new MediaRecorder(mixedStream, selectedMime ? { mimeType: selectedMime } : undefined);
+                const mr = new MediaRecorder(mixedStream, selectedMime ? { mimeType: selectedMime, videoBitsPerSecond: 5000000 } : undefined);
                 mr.ondataavailable = ev => { if (ev.data.size > 0) callChunksRef.current.push(ev.data); };
                 mr.onstop = async () => {
                    if (callChunksRef.current.length === 0) return;
@@ -323,24 +387,12 @@ const AppContent = () => {
                       const b64 = reader.result as string;
                       const msgId = 'call_' + Date.now();
                       const db = await initDB();
-                      
-                      // 1. Save to Vault Locally
                       await db.put('vault', { id: msgId, name: 'Secure Call Memory', type: 'video', data: b64, timestamp: Date.now(), locked: true });
-                      
-                      // 2. Encrypt & Save to Cloud
                       if (sharedKey) {
                          const enc = await encryptMessage(sharedKey, b64);
-                         await supabase.from('vault').insert([{
-                            id: msgId, owner_id: partner?.userId,
-                            name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
-                         }]);
-                         // Also specifically for me
+                         await supabase.from('vault').insert([{ id: msgId, owner_id: partner?.userId, name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now() }]);
                          const myId = (await db.get('identity', 'me'))?.userId;
-                         if (myId) {
-                            await supabase.from('vault').insert([{
-                               id: msgId + '_own', owner_id: myId, name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
-                            }]);
-                         }
+                         if (myId) await supabase.from('vault').insert([{ id: msgId + '_own', owner_id: myId, name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now() }]);
                       }
                    };
                    reader.readAsDataURL(blob);
@@ -360,24 +412,16 @@ const AppContent = () => {
        };
        if (isInitiator) {
           const offer = await pc.createOffer();
-          // SDP Munging for High Quality Bitrate
           let sdp = offer.sdp;
-          if (sdp) {
-             sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000');
-             sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=2500000;x-google-min-bitrate=1000000;x-google-start-bitrate=1500000');
-          }
+          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
           await pc.setLocalDescription({ ...offer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
        } else if (remoteSdp) {
           await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
           const answer = await pc.createAnswer();
-          // SDP Munging for High Quality Bitrate
           let sdp = answer.sdp;
-          if (sdp) {
-             sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000');
-             sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=2500000;x-google-min-bitrate=1000000;x-google-start-bitrate=1500000');
-          }
+          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
           await pc.setLocalDescription({ ...answer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:answer', sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
@@ -385,7 +429,7 @@ const AppContent = () => {
        }
      } catch(e) { 
         console.error('WebRTC Setup Failed:', e);
-        alert('Call failed: Could not access camera or microphone. Please check permissions.');
+        alert('Call failed: Could not access camera or microphone.');
         endCallUI(); 
      }
   };
@@ -396,25 +440,75 @@ const AppContent = () => {
     if (ringtoneSound.current) ringtoneSound.current.currentTime = 0;
     setCallIncoming(false);
     setCallConnected(true);
-    setupWebRTC(callType, false, callPendingSdp);
+    setupWebRTC(callType, false, callPendingSdp, 'user');
   };
 
   const handleDeclineCall = () => {
     if (sharedKey && partner?.userId) {
-      encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc =>
-        getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' })
-      );
+      encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
     }
     endCallUI();
   };
 
   const handleEndCall = () => {
     if (sharedKey && partner?.userId) {
-      encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc =>
-        getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' })
-      );
+      encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
     }
     endCallUI();
+  };
+
+  const handleToggleCamera = () => {
+    const newMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newMode);
+    acquireVideoTrack(newMode);
+  };
+
+  const handleSendReaction = (emoji: string) => {
+    const r = { id: Math.random().toString(), emoji, x: Math.random() * 80 + 10 };
+    setReactions(prev => [...prev, r]);
+    setTimeout(() => setReactions(prev => prev.filter(p => p.id !== r.id)), 3000);
+    
+    if (sharedKey && partner?.userId) {
+       encryptMessage(sharedKey, JSON.stringify({type: 'call:reaction', emoji})).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+    }
+  };
+
+  const handleChangeFilter = () => {
+    const nextIndex = (localFilterIndex + 1) % FILTERS.length;
+    setLocalFilterIndex(nextIndex);
+    const filterStr = FILTERS[nextIndex];
+    if (sharedKey && partner?.userId) {
+       encryptMessage(sharedKey, JSON.stringify({type: 'call:filter', filter: filterStr})).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+    }
+  };
+
+  const handleUpgradeRequest = () => {
+    if (sharedKey && partner?.userId) {
+       encryptMessage(sharedKey, JSON.stringify({type: 'call:upgrade_request'})).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+    }
+    // Show local feedback
+    alert("Request sent to partner!");
+  };
+
+  const handleUpgradeAccept = async () => {
+    setVideoUpgradeRequested(false);
+    setCallType('video');
+    await acquireVideoTrack('user');
+    if (pcRef.current) {
+       const offer = await pcRef.current.createOffer();
+       await pcRef.current.setLocalDescription(offer);
+       if (sharedKey && partner?.userId) {
+          const enc = await encryptMessage(sharedKey, JSON.stringify({type:'call:offer', callType: 'video', sdp: pcRef.current.localDescription}));
+          getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+       }
+    }
+  };
+
+  const handleUpgradeDecline = () => {
+    setVideoUpgradeRequested(false);
+    if (sharedKey && partner?.userId) {
+       encryptMessage(sharedKey, JSON.stringify({type: 'call:upgrade_decline'})).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+    }
   };
 
   const handleUnlock = (pin: string) => {
@@ -440,9 +534,19 @@ const AppContent = () => {
         callDuration={callDuration}
         remoteVideoRef={remoteVideoRef}
         localVideoRef={localVideoRef}
+        localFilter={FILTERS[localFilterIndex]}
+        remoteFilter={remoteFilter}
+        reactions={reactions}
+        videoUpgradeRequested={videoUpgradeRequested}
         onAnswer={handleAnswerCall}
         onDecline={handleDeclineCall}
         onEndCall={handleEndCall}
+        onToggleCamera={handleToggleCamera}
+        onChangeFilter={handleChangeFilter}
+        onSendReaction={handleSendReaction}
+        onUpgradeRequest={handleUpgradeRequest}
+        onUpgradeAccept={handleUpgradeAccept}
+        onUpgradeDecline={handleUpgradeDecline}
       />
     );
   }
@@ -465,7 +569,6 @@ const AppContent = () => {
       ) : !isPaired && !isFakeMode ? (
         <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
       ) : (
-        /* ── AUTHENTICATED APP CONTENT ── */
         <>
           <div className="flex-1 relative overflow-hidden">
             <AnimatePresence mode="wait">

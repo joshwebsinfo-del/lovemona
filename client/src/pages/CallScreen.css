@@ -1,6 +1,5 @@
 /* ══════════════════════════════════════════════
-   CallScreen - Nuclear isolation CSS
-   Forces full-screen takeover on ALL mobile browsers
+   CallScreen - Nuclear isolation CSS + Rich Features
    ══════════════════════════════════════════════ */
 
 /* When call is active, kill EVERYTHING on body */
@@ -18,17 +17,16 @@ body.call-active > #root {
   background: #000 !important;
 }
 
-/* The call screen container - absolute fullscreen takeover */
+/* Base Wrapper */
 .call-screen {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 100vh;
-  min-height: 100dvh; /* dynamic viewport height for mobile */
+  width: 100vw;
+  height: 100vh;
+  min-height: 100dvh;
   z-index: 999999;
   background: #050505;
   display: flex;
@@ -36,26 +34,22 @@ body.call-active > #root {
   align-items: center;
   justify-content: center;
   color: white;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: system-ui, -apple-system, sans-serif;
   overflow: hidden;
-  -webkit-transform: translateZ(0); /* Force GPU layer */
-  transform: translateZ(0);
   isolation: isolate;
-  contain: layout style paint;
 }
 
-/* Subtle purple ambient glow */
 .call-screen__glow {
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse at 50% 40%, rgba(139, 92, 246, 0.12) 0%, transparent 60%);
   pointer-events: none;
+  z-index: 1;
 }
 
-/* Main content wrapper */
 .call-screen__content {
   position: relative;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -64,7 +58,37 @@ body.call-active > #root {
   padding: 0 24px;
 }
 
-/* Avatar */
+/* Header (Top Bar) */
+.call-screen__header {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 30px;
+  z-index: 30;
+}
+
+.call-screen__icon-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.call-screen__icon-btn:active {
+  transform: scale(0.9);
+}
+
+/* Avatar / Connecting UI */
 .call-screen__avatar {
   width: 120px;
   height: 120px;
@@ -73,42 +97,28 @@ body.call-active > #root {
   border: 2px solid rgba(255, 255, 255, 0.1);
   margin-bottom: 24px;
   background: #111;
-  flex-shrink: 0;
 }
 
 .call-screen__avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
-/* Pulse animation for incoming */
-.call-screen__avatar--ringing {
-  animation: avatar-pulse 2s ease-in-out infinite;
-}
-
-@keyframes avatar-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
-  50% { box-shadow: 0 0 0 20px rgba(34, 197, 94, 0); }
-}
-
-/* Partner name */
 .call-screen__name {
   font-size: 36px;
   font-weight: 900;
   margin: 0 0 10px 0;
-  letter-spacing: -1px;
   color: white;
-  line-height: 1;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
 }
 
-/* Status badge */
 .call-screen__status {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
   border-radius: 100px;
   padding: 10px 25px;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -120,121 +130,185 @@ body.call-active > #root {
   color: #8b5cf6;
 }
 
-/* Buttons container */
+/* Main Action Buttons (Answer/Decline/End) */
 .call-screen__actions {
   display: flex;
   gap: 50px;
   align-items: center;
   justify-content: center;
-  width: 100%;
 }
 
-/* Individual button column */
 .call-screen__btn-col {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* Common button base */
 .call-screen__btn {
   border-radius: 50%;
   border: none;
   color: white;
+  font-size: 30px;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease;
-  outline: none;
+  transition: transform 0.1s;
 }
 
-.call-screen__btn:active {
-  transform: scale(0.92);
-}
+.call-screen__btn:active { transform: scale(0.9); }
 
-/* Decline button */
 .call-screen__btn--decline {
-  width: 85px;
-  height: 85px;
+  width: 80px; height: 80px;
   background: #ef4444;
-  font-size: 30px;
-  box-shadow: 0 15px 40px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
 }
 
-/* Answer button */
 .call-screen__btn--answer {
-  width: 85px;
-  height: 85px;
+  width: 80px; height: 80px;
   background: #22c55e;
-  font-size: 30px;
-  box-shadow: 0 15px 40px rgba(34, 197, 94, 0.4);
-  animation: answer-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 10px 30px rgba(34, 197, 94, 0.4);
 }
 
-@keyframes answer-pulse {
-  0%, 100% { box-shadow: 0 15px 40px rgba(34, 197, 94, 0.4); }
-  50% { box-shadow: 0 15px 60px rgba(34, 197, 94, 0.7); }
-}
-
-/* End call button (outgoing/connected) */
 .call-screen__btn--end {
-  width: 100px;
-  height: 100px;
+  width: 90px; height: 90px;
   background: #ef4444;
-  font-size: 35px;
-  box-shadow: 0 20px 50px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 10px 40px rgba(239, 68, 68, 0.4);
 }
 
-/* Button labels */
 .call-screen__btn-label {
   margin-top: 15px;
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 2px;
-  opacity: 0.5;
+  opacity: 0.8;
 }
 
-.call-screen__btn-label--decline {
-  color: #ef4444;
+/* Reactions Bar */
+.call-screen__reactions-bar {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  padding: 30px 20px;
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  z-index: 40;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
 }
 
-.call-screen__btn-label--answer {
-  color: #22c55e;
+.call-screen__react-btn {
+  width: 50px;
+  height: 50px;
+  border-radius: 25px;
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s, background 0.2s;
+}
+.call-screen__react-btn:active {
+  transform: scale(0.85);
+  background: rgba(255,255,255,0.3);
 }
 
-.call-screen__btn-label--end {
-  font-size: 12px;
-  opacity: 0.3;
-  color: white;
-}
-
-/* Video feed layer */
+/* Video Layer */
 .call-screen__video-layer {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  background: black;
+  background: #000;
+  transition: opacity 0.5s;
 }
 
 .call-screen__video-remote {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 0.8;
+  transition: filter 0.5s;
 }
 
 .call-screen__video-local {
   position: absolute;
-  bottom: 40px;
-  right: 30px;
-  width: 130px;
-  height: 190px;
-  border-radius: 30px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
+  bottom: 120px;
+  right: 20px;
+  width: 110px;
+  height: 160px;
+  border-radius: 24px;
+  border: 2px solid rgba(255,255,255,0.3);
   object-fit: cover;
-  z-index: 2;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  transition: filter 0.5s;
+  z-index: 10;
+}
+
+/* Floating Reactions */
+.floating-reaction {
+  position: absolute;
+  bottom: 100px;
+  font-size: 40px;
+  z-index: 90;
+  pointer-events: none;
+  animation: floatUp 3s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+}
+
+@keyframes floatUp {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  10% { transform: translateY(-50px) scale(1.2); opacity: 1; }
+  100% { transform: translateY(-400px) scale(1); opacity: 0; }
+}
+
+/* Upgrade Prompt */
+.call-screen__upgrade-prompt {
+  position: absolute;
+  top: 120px;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  border-radius: 24px;
+  padding: 20px;
+  text-align: center;
+  z-index: 100;
+  animation: slideDown 0.3s cubic-bezier(0.2, 1, 0.3, 1);
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.call-screen__upgrade-title {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 15px;
+  color: white;
+}
+
+.call-screen__upgrade-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.call-screen__upgrade-btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 12px;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+}
+
+.call-screen__upgrade-btn--accept {
+  background: #8b5cf6;
+  color: white;
+}
+
+.call-screen__upgrade-btn--reject {
+  background: rgba(255,255,255,0.1);
+  color: white;
 }
