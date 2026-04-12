@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Plus, Image as ImageIcon, Video, Mic, FolderOpen, Trash2, Download, X } from 'lucide-react';
+import { Lock, Plus, Image as ImageIcon, Video, Mic, FolderOpen, Trash2, X } from 'lucide-react';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
-import { encryptMessage, decryptMessage, importPublicKey, deriveSharedSecret, encryptBuffer, decryptBuffer, base64ToBuffer, bufferToBase64 } from '../lib/crypto';
+import { encryptMessage, decryptMessage, importPublicKey, deriveSharedSecret, encryptBuffer, base64ToBuffer, bufferToBase64, decryptBuffer } from '../lib/crypto';
 
 export const VaultScreen: React.FC = () => {
   const [items, setItems] = useState<{id: string, name: string, type: string, data: string, timestamp: number}[]>([]);
@@ -402,20 +402,10 @@ export const VaultScreen: React.FC = () => {
       <AnimatePresence>
         {/* Lightbox */}
         {viewItem && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6">
-            <button onClick={() => setViewItem(null)} className="absolute top-8 right-8 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95"><X size={24} /></button>
-            <div className="w-full max-w-lg">
-                <div className="rounded-3xl overflow-hidden shadow-2xl border border-white/10">
-                   {viewItem.type === 'photo' && <img src={viewItem.data} className="w-full h-auto" />}
-                   {viewItem.type === 'video' && <video src={viewItem.data} className="w-full h-auto" controls autoPlay />}
-                   {viewItem.type === 'voice' && <audio src={viewItem.data} className="w-full p-8" controls autoPlay />}
-                </div>
-                <div className="mt-8 flex justify-between items-center text-white/50 px-2 text-xs font-bold uppercase tracking-widest">
-                   <span>{viewItem.name}</span>
-                   <span>{new Date(viewItem.timestamp).toLocaleDateString()}</span>
-                </div>
-            </div>
-          </motion.div>
+          <Lightbox 
+            item={viewItem} 
+            onClose={() => setViewItem(null)} 
+          />
         )}
 
         {/* Secret Drop Setup */}
@@ -496,4 +486,71 @@ export const VaultScreen: React.FC = () => {
       <input type="file" ref={secretFileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
     </div>
   );
+};
+
+// Optimization: Lightbox component with streaming decryption for large files
+const Lightbox = ({ item, onClose }: { item: any, onClose: () => void }) => {
+   const [src, setSrc] = useState(item.data.startsWith('storage://') ? '' : item.data);
+   const [loading, setLoading] = useState(item.data.startsWith('storage://'));
+
+   useEffect(() => {
+     if (item.data.startsWith('storage://')) {
+       const load = async () => {
+         try {
+           const db = await initDB();
+           const identity = await db.get('identity', 'me');
+           const partner = await db.get('partner', 'partner');
+           if (identity && partner) {
+              const pk = await importPublicKey(partner.publicKeyPem);
+              const sk = await deriveSharedSecret(identity.privateKey, pk);
+              
+              const parts = item.data.replace('storage://', '').split('::');
+              const path = parts[0];
+              const ivStr = parts[1];
+
+              const { data, error } = await supabase.storage.from('vault').download(path);
+              if (error) throw error;
+
+              const iv = new Uint8Array(base64ToBuffer(ivStr));
+              const dec = await decryptBuffer(sk, await data.arrayBuffer(), iv);
+              const url = URL.createObjectURL(new Blob([dec]));
+              setSrc(url);
+           }
+         } catch (e) {
+           console.error('Lightbox load error', e);
+         } finally {
+           setLoading(false);
+         }
+       };
+       load();
+     }
+   }, [item]);
+
+   return (
+     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6">
+       <button onClick={onClose} className="absolute top-8 right-8 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95"><X size={24} /></button>
+       <div className="w-full max-w-lg">
+           <div className="rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-900/50 min-h-[300px] flex items-center justify-center">
+              {loading ? (
+                 <div className="flex flex-col items-center space-y-4">
+                    <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    <p className="text-[10px] text-primary font-black uppercase tracking-[4px]">Decrypting Magic...</p>
+                 </div>
+              ) : (
+                <>
+                  {item.type === 'photo' && <img src={src} className="w-full h-auto" />}
+                  {item.type === 'video' && <video src={src} className="w-full h-auto" controls autoPlay />}
+                  {item.type === 'voice' && <audio src={src} className="w-full p-8" controls autoPlay />}
+                </>
+              )}
+           </div>
+           {!loading && (
+              <div className="mt-8 flex justify-between items-center text-white/50 px-2 text-xs font-bold uppercase tracking-widest">
+                 <span>{item.name}</span>
+                 <span>{new Date(item.timestamp).toLocaleDateString()}</span>
+              </div>
+           )}
+       </div>
+     </motion.div>
+   );
 };
