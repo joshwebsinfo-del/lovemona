@@ -126,24 +126,30 @@ export function CallScreen({
         </div>
       </div>
 
-      {/* Video feeds - only when video call is connected */}
-      {callType === 'video' && connected && (
-        <div className="call-screen__video-layer">
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="call-screen__video-remote"
-          />
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="call-screen__video-local"
-          />
-        </div>
-      )}
+      {/* Media layer - ALWAYS mounted so refs are never null for WebRTC ontrack events.
+          Visually hidden unless it's an active video call. Audio will still play. */}
+      <div 
+        className="call-screen__video-layer"
+        style={{
+          opacity: (callType === 'video' && connected) ? 1 : 0,
+          pointerEvents: (callType === 'video' && connected) ? 'auto' : 'none',
+          zIndex: (callType === 'video' && connected) ? 0 : -10
+        }}
+      >
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="call-screen__video-remote"
+        />
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="call-screen__video-local"
+        />
+      </div>
     </div>
   );
 }
