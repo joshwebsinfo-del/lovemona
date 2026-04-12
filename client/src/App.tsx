@@ -231,8 +231,11 @@ const AppContent = () => {
        if ('wakeLock' in navigator) (navigator as any).wakeLock.request('screen').then((lock: any) => { wakeLockRef.current = lock; }).catch(() => {});
        if (callIncoming) {
           ringtoneSound.current?.play().catch(() => {});
-          if (Notification.permission === 'granted') {
-             new Notification('Incoming Secure Call', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any);
+          // SAFELY check for Notification support before using it
+          if ('Notification' in window && window.Notification && window.Notification.permission === 'granted') {
+             try {
+               new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any);
+             } catch(e) { console.warn('Failed to show notification', e); }
           }
        } else {
           ringtoneSound.current?.pause();
