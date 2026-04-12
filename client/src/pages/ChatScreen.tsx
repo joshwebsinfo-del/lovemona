@@ -408,32 +408,52 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           }
           
           if (payload.type === 'media') {
-             const vType = payload.mediaType?.startsWith('audio') ? 'voice' : (payload.mediaType?.startsWith('video') ? 'video' : 'photo');
-             const vId = incomingId + Math.random().toString();
-             await db.put('vault', {
-                id: vId,
-                name: payload.text || 'Received Media',
-                type: vType,
-                data: payload.mediaData,
-                timestamp: Date.now(),
-                locked: true
-             });
-             
-             try {
-                if (payload.mediaData) {
-                   const encMedia = await encryptMessage(sharedKey, payload.mediaData);
-                   await supabase.from('vault').insert({
-                      id: vId,
-                      owner_id: myUserId,
-                      name: payload.text || 'Received Media',
-                      type: vType,
-                      encrypted_data: encMedia.encrypted,
-                      iv: encMedia.iv,
-                      timestamp: Date.now()
-                   });
-                }
-             } catch { /* ignored */ }
-          }
+              const vType = payload.mediaType?.startsWith('audio') ? 'voice' : (payload.mediaType?.startsWith('video') ? 'video' : 'photo');
+              const vId = incomingId + '_recv_' + Date.now();
+              
+              // Determine what data to save locally
+              // For storage-based media (video notes), save the storage pointer
+              // For inline media (photos, voice), save the base64 data
+              const localData = payload.storagePath 
+                ? `storage://${payload.storagePath}::${payload.storageIv}` 
+                : (payload.mediaData || '');
+              
+              if (localData) {
+                await db.put('vault', {
+                   id: vId,
+                   name: payload.text || 'Received Media',
+                   type: vType,
+                   data: localData,
+                   timestamp: Date.now(),
+                   locked: true
+                });
+                
+                // Cloud backup for BOTH users so it syncs across devices
+                try {
+                   const encMedia = await encryptMessage(sharedKey, localData);
+                   await supabase.from('vault').insert([
+                     {
+                       id: vId + '_me',
+                       owner_id: myUserId,
+                       name: payload.text || 'Received Media',
+                       type: vType,
+                       encrypted_data: encMedia.encrypted,
+                       iv: encMedia.iv,
+                       timestamp: Date.now()
+                     },
+                     {
+                       id: vId + '_partner',
+                       owner_id: data.senderId,
+                       name: payload.text || 'Received Media',
+                       type: vType,
+                       encrypted_data: encMedia.encrypted,
+                       iv: encMedia.iv,
+                       timestamp: Date.now()
+                     }
+                   ]);
+                } catch (vaultErr) { console.error('Vault cloud backup error:', vaultErr); }
+              }
+           }
           
           scrollToBottom();
         } 
@@ -806,7 +826,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          try {
             const db = await initDB();
             const msgId = Date.now().toString();
-            let payload: ChatPayload;
             
             if (sharedKey) {
                // Use standard FileReader which is bulletproof on absolute iOS versions
@@ -826,13 +845,24 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                const { error: storageErr } = await supabase.storage.from('vault').upload(storagePath, encryptedBlob, { contentType: 'application/octet-stream' });
                if (storageErr) throw storageErr;
                
-               payload = { type: 'media', text: 'Video Note', mediaType: mimeType, storagePath, storageIv: ivB64 };
-               
-               const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
-               setMessages(prev => [...prev, msg]);
-               scrollToBottom();
-               await db.put('messages', msg);
-               await sendSecurePayload(payload, msgId);
+               const payload: ChatPayload = { type: 'media', text: 'Video Note', mediaType: mimeType, storagePath, storageIv: ivB64 };
+                
+                const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+                setMessages(prev => [...prev, msg]);
+                scrollToBottom();
+                await db.put('messages', msg);
+                await sendSecurePayload(payload, msgId);
+                
+                // Save video note to vault for both partners
+                const storagePointer = `storage://${storagePath}::${ivB64}`;
+                await db.put('vault', { id: msgId + '_me', name: 'Video Note', type: 'video', data: storagePointer, timestamp: Date.now(), locked: true });
+                try {
+                  const encVault = await encryptMessage(sharedKey, storagePointer);
+                  await supabase.from('vault').insert([
+                    { id: msgId + '_me', owner_id: myUserId, name: 'Video Note', type: 'video', encrypted_data: encVault.encrypted, iv: encVault.iv, timestamp: Date.now() },
+                    { id: msgId + '_partner', owner_id: partnerInfo.userId, name: 'Video Note', type: 'video', encrypted_data: encVault.encrypted, iv: encVault.iv, timestamp: Date.now() }
+                  ]);
+                } catch (vErr) { console.error('Video note vault sync error:', vErr); }
             }
          } catch(e: any) {
             console.error('VideoNote Error:', e);
