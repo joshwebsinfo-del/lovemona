@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,6 +13,7 @@ import { SettingsScreen } from './pages/SettingsScreen';
 import { initDB } from './lib/db';
 import type { AuthConfig, Partner } from './lib/types';
 import { initSocket, getSocket } from './lib/socket';
+import { supabase } from './lib/supabase';
 import { decryptMessage, encryptMessage, deriveSharedSecret, importPublicKey } from './lib/crypto';
 
 // ──────────────────────────────────────────────
@@ -110,6 +110,10 @@ const AppContent = () => {
   const ringtoneSound = useRef<HTMLAudioElement | null>(null);
   const callDurationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wakeLockRef = useRef<any>(null);
+
+  // Video Recording Refs
+  const callRecorderRef = useRef<MediaRecorder | null>(null);
+  const callChunksRef = useRef<Blob[]>([]);
 
   const location = useLocation();
 
@@ -218,6 +222,10 @@ const AppContent = () => {
   }, [callState]);
 
   const endCallUI = () => {
+    if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
+       callRecorderRef.current.stop();
+       callRecorderRef.current = null;
+    }
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
     if (localStreamRef.current) { localStreamRef.current.getTracks().forEach((t: any) => t.stop()); localStreamRef.current = null; }
     setCallState({ active: false, type: 'video', incoming: false, connected: false });
@@ -225,13 +233,75 @@ const AppContent = () => {
 
   const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
     try {
-       const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+       const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: type === 'video' ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
+       });
        localStreamRef.current = stream;
        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+       
+       const pc = new RTCPeerConnection({ 
+          iceServers: [
+             { urls: 'stun:stun.l.google.com:19302' },
+             { urls: 'stun:stun1.l.google.com:19302' },
+             { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+             { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" }
+          ] 
+       });
        pcRef.current = pc;
        stream.getTracks().forEach(track => pc.addTrack(track, stream));
-       pc.ontrack = (e) => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; };
+
+       pc.ontrack = (e) => { 
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; 
+
+          // Mixed Recording Logic (Both Devices)
+          if (!callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
+             try {
+                const remoteStream = e.streams[0];
+                const mixedStream = new MediaStream([
+                   ...remoteStream.getTracks(),
+                   ...stream.getAudioTracks() // Mix my audio with their stream
+                ]);
+                callChunksRef.current = [];
+                const mr = new MediaRecorder(mixedStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+                mr.ondataavailable = ev => { if (ev.data.size > 0) callChunksRef.current.push(ev.data); };
+                mr.onstop = async () => {
+                   if (callChunksRef.current.length === 0) return;
+                   const blob = new Blob(callChunksRef.current, { type: 'video/webm' });
+                   callChunksRef.current = [];
+                   const reader = new FileReader();
+                   reader.onload = async () => {
+                      const b64 = reader.result as string;
+                      const msgId = 'call_' + Date.now();
+                      const db = await initDB();
+                      
+                      // 1. Save to Vault Locally
+                      await db.put('vault', { id: msgId, name: 'Secure Call Memory', type: 'video', data: b64, timestamp: Date.now(), locked: true });
+                      
+                      // 2. Encrypt & Save to Cloud
+                      if (sharedKey) {
+                         const enc = await encryptMessage(sharedKey, b64);
+                         await supabase.from('vault').insert([{
+                            id: msgId, owner_id: partner?.userId, // backup to both if needed, but here we just store for self
+                            name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
+                         }]);
+                         // Also specifically for me
+                         const myId = (await db.get('identity', 'me'))?.userId;
+                         if (myId) {
+                            await supabase.from('vault').insert([{
+                               id: msgId + '_own', owner_id: myId, name: 'Secure Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
+                            }]);
+                         }
+                      }
+                   };
+                   reader.readAsDataURL(blob);
+                };
+                mr.start(2000);
+                callRecorderRef.current = mr;
+             } catch(err) { console.warn('Call recorder init failed', err); }
+          }
+       };
+
        pc.onicecandidate = (e) => { 
           if (e.candidate && sharedKey && partner?.userId) {
              encryptMessage(sharedKey, JSON.stringify({type:'call:ice', candidate: e.candidate})).then(enc => {
@@ -241,13 +311,25 @@ const AppContent = () => {
        };
        if (isInitiator) {
           const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
+          // SDP Munging for High Quality Bitrate
+          let sdp = offer.sdp;
+          if (sdp) {
+             sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000');
+             sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=2500000;x-google-min-bitrate=1000000;x-google-start-bitrate=1500000');
+          }
+          await pc.setLocalDescription({ ...offer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
        } else if (remoteSdp) {
           await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
           const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
+          // SDP Munging for High Quality Bitrate
+          let sdp = answer.sdp;
+          if (sdp) {
+             sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000');
+             sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=2500000;x-google-min-bitrate=1000000;x-google-start-bitrate=1500000');
+          }
+          await pc.setLocalDescription({ ...answer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:answer', sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
           while (iceCandidateQueue.current.length > 0) { const cand = iceCandidateQueue.current.shift(); await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(()=>{}); }

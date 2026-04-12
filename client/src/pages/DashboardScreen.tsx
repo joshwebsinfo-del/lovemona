@@ -42,7 +42,7 @@ const RomanticAtmosphere: React.FC = () => {
   );
 };
 
-export const DashboardScreen: React.FC = () => {
+export const DashboardScreen = React.memo(() => {
   const navigate = useNavigate();
   const [partner, setPartner] = useState<Partner | null>(null);
   const [, setMe] = useState<AuthConfig | null>(null);
@@ -340,4 +340,4 @@ export const DashboardScreen: React.FC = () => {
 
     </div>
   );
-};
+});
