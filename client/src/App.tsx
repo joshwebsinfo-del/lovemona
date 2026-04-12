@@ -147,7 +147,9 @@ const AppContent = () => {
       } catch (err) { console.error('Failed to load app config:', err); } finally { setIsLoading(false); }
     };
     load();
+  }, []);
 
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
          const s = getSocket();
@@ -157,6 +159,7 @@ const AppContent = () => {
 
     const handleGlobalCallStart = (e: CustomEvent) => {
        const { type } = e.detail;
+       if (!partner || !sharedKey) return;
        setCallState({ active: true, type: type || 'video', incoming: false, connected: false });
        setupWebRTC(type || 'video', true);
     };

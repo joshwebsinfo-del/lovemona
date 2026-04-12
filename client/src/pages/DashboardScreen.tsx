@@ -122,11 +122,14 @@ export const DashboardScreen = React.memo(() => {
           s.on('message:receive', handleReceive);
           s.on('status:update', handleStatus);
           
-          if (s.connected && p.userId) s.emit('status:subscribe', { partnerId: p.userId });
+          const doSubscribe = () => { if (p.userId) s.emit('status:subscribe', { partnerId: p.userId }); };
+          if (s.connected) doSubscribe();
+          s.on('connect', doSubscribe);
 
           return () => { 
              s.off('message:receive', handleReceive); 
              s.off('status:update', handleStatus); 
+             s.off('connect', doSubscribe);
           };
         } catch { /* ignored */ }
       }
