@@ -56,6 +56,15 @@ export const VaultScreen: React.FC = () => {
 
   useEffect(() => {
     loadVault();
+    
+    // Listen for Realtime Secret Drops and Uploads from partner
+    const channel = supabase.channel('vault_sync')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault' }, () => {
+          loadVault(); // trigger immediate local sync and render
+      })
+      .subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -782,17 +782,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
   const startVideoNote = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } }, audio: { echoCancellation: true, noiseSuppression: true } });
-      const mr = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      // Stripping explicit height/width constraints forcing mobile hardware defaults
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true } });
+      
+      // Let the browser choose the native OS codec (fixes Safari 'video/webm' crash)
+      const mr = new MediaRecorder(stream);
       mediaRecorderRef.current = mr;
       audioChunksRef.current = [];
       
       mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mr.onstop = async () => {
          if (audioChunksRef.current.length === 0) return;
-         const videoBlob = new Blob(audioChunksRef.current, { type: 'video/webm' });
+         // Use the recorder's native returned mimeType instead of hardcoding webm
+         const mimeType = mr.mimeType || 'video/mp4';
+         const videoBlob = new Blob(audioChunksRef.current, { type: mimeType });
          
-         const file = new File([videoBlob], `VideoNote_${Date.now()}.webm`, { type: 'video/webm' });
+         const file = new File([videoBlob], `VideoNote_${Date.now()}.mp4`, { type: mimeType });
          
          setIsProcessingMedia(true);
          try {
@@ -941,15 +946,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] relative overflow-hidden w-full">
       {isVideoRecording && (
-         <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center">
-            <video ref={videoPreviewRef} className="w-full h-full object-cover" muted playsInline />
-            <div className="absolute top-12 flex flex-col items-center">
-               <div className="text-red-500 font-bold text-2xl animate-pulse">{formatTime(recordDuration)} / 1:00</div>
-               <div className="text-white/60 text-xs mt-2 uppercase tracking-widest bg-black/50 px-4 py-1 rounded-full">High Quality Video Note</div>
+         <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center pt-20 pb-40">
+            <h2 className="text-white/60 text-xs mb-8 uppercase tracking-widest bg-white/5 py-1.5 px-6 rounded-full border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.1)]">Video Note Recording</h2>
+            
+            <div className="relative w-full max-w-[320px] aspect-[3/4] rounded-[40px] overflow-hidden shadow-[0_0_60px_rgba(239,68,68,0.3)] border-2 border-red-500/30">
+               <video ref={videoPreviewRef} className="w-full h-full object-cover" muted playsInline />
+               <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-red-400 font-black text-sm tracking-widest border border-red-500/30">
+                  {formatTime(recordDuration)}
+               </div>
             </div>
-            <div className="absolute bottom-20 flex space-x-6">
-               <button onClick={cancelRecording} className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white active:scale-95"><X size={28} /></button>
-               <button onClick={stopVideoNote} className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-[0_0_40px_rgba(239,68,68,0.6)]"><Send size={32} /></button>
+
+            <div className="absolute bottom-16 flex space-x-6 items-center">
+               <button onClick={cancelRecording} className="w-14 h-14 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform hover:bg-white/20"><X size={24} /></button>
+               <button onClick={stopVideoNote} className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-[0_0_40px_rgba(239,68,68,0.6)] transition-transform hover:bg-red-400"><Send size={32} /></button>
             </div>
          </div>
       )}
