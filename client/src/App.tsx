@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Home, Lock, Settings, X, Phone } from 'lucide-react';
+import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
 import { DashboardScreen } from './pages/DashboardScreen';
 import { ChatScreen } from './pages/ChatScreen';
 import { VaultScreen } from './pages/VaultScreen';
@@ -224,7 +224,128 @@ const AppContent = () => {
     }
   }, [callState]);
 
+  // ── DOM-INJECTED CALL OVERLAY (bypasses React render tree entirely) ──
+  const callOverlayRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // Remove any existing overlay first
+    if (callOverlayRef.current) {
+      callOverlayRef.current.remove();
+      callOverlayRef.current = null;
+    }
+
+    if (!callState.active) return;
+
+    // Create overlay via raw DOM
+    const overlay = document.createElement('div');
+    overlay.id = 'securelove-call-overlay';
+    overlay.style.cssText = `
+      position:fixed; top:0; left:0; width:100vw; height:100vh;
+      z-index:2147483647; background:#050505;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      padding:24px; text-align:center; color:white; font-family:system-ui,-apple-system,sans-serif;
+    `;
+
+    const partnerName = partner?.nick || 'Partner';
+    const avatarUrl = partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`;
+    const statusText = callState.incoming 
+      ? 'Incoming Secure Call...'
+      : callState.connected 
+        ? `In Call • ${formatTime(callDuration)}`
+        : 'Calling...';
+
+    overlay.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;max-width:320px;width:100%;">
+        <div style="width:112px;height:112px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,0.1);margin-bottom:24px;background:#1a1a1a;">
+          <img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;" alt="Partner" />
+        </div>
+        <h2 style="font-size:32px;font-weight:900;text-transform:uppercase;letter-spacing:-1px;margin:0 0 8px 0;">${partnerName}</h2>
+        <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:999px;padding:8px 24px;margin-bottom:48px;">
+          <span style="font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:3px;color:rgba(255,255,255,0.5);">${statusText}</span>
+        </div>
+        <div id="call-buttons" style="display:flex;gap:48px;align-items:center;"></div>
+      </div>
+    `;
+
+    const btnContainer = overlay.querySelector('#call-buttons')!;
+
+    if (callState.incoming) {
+      // Reject button
+      const rejectBtn = document.createElement('div');
+      rejectBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+      rejectBtn.innerHTML = `
+        <button id="btn-reject" style="width:80px;height:80px;background:#dc2626;border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 10px 30px rgba(220,38,38,0.3);color:white;font-size:32px;font-weight:bold;">✕</button>
+        <span style="margin-top:12px;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);">Reject</span>
+      `;
+      btnContainer.appendChild(rejectBtn);
+
+      // Accept button
+      const acceptBtn = document.createElement('div');
+      acceptBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+      acceptBtn.innerHTML = `
+        <button id="btn-accept" style="width:80px;height:80px;background:#16a34a;border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 10px 30px rgba(22,163,74,0.3);color:white;font-size:32px;animation:bounce 1s infinite;">📞</button>
+        <span style="margin-top:12px;font-size:10px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);">Answer</span>
+      `;
+      btnContainer.appendChild(acceptBtn);
+
+      // Add bounce animation
+      const style = document.createElement('style');
+      style.textContent = '@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}';
+      overlay.appendChild(style);
+    } else {
+      // End call button
+      const endBtn = document.createElement('div');
+      endBtn.style.cssText = 'display:flex;flex-direction:column;align-items:center;';
+      endBtn.innerHTML = `
+        <button id="btn-reject" style="width:96px;height:96px;background:#dc2626;border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 10px 30px rgba(220,38,38,0.3);color:white;font-size:36px;">📞</button>
+        <span style="margin-top:16px;font-size:11px;font-weight:900;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.3);">End Call</span>
+      `;
+      btnContainer.appendChild(endBtn);
+    }
+
+    // Attach event listeners
+    overlay.querySelector('#btn-reject')?.addEventListener('click', () => {
+      if (sharedKey) encryptMessage(sharedKey, JSON.stringify({type:'call:end'})).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+      endCallUI();
+    });
+    overlay.querySelector('#btn-accept')?.addEventListener('click', () => {
+      setCallState(s => ({ ...s, incoming: false, connected: true }));
+      setupWebRTC(callState.type, false, callState.pendingSdp);
+    });
+
+    // Video elements for connected calls
+    if (callState.type === 'video' && callState.connected) {
+      const remoteVid = document.createElement('video');
+      remoteVid.autoplay = true;
+      remoteVid.playsInline = true;
+      remoteVid.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.8;z-index:-1;';
+      overlay.appendChild(remoteVid);
+      if (remoteVideoRef.current?.srcObject) remoteVid.srcObject = remoteVideoRef.current.srcObject;
+
+      const localVid = document.createElement('video');
+      localVid.autoplay = true;
+      localVid.playsInline = true;
+      localVid.muted = true;
+      localVid.style.cssText = 'position:fixed;bottom:40px;right:30px;width:130px;height:190px;border-radius:32px;border:2px solid rgba(255,255,255,0.2);object-fit:cover;z-index:10;';
+      overlay.appendChild(localVid);
+      if (localVideoRef.current?.srcObject) localVid.srcObject = localVideoRef.current.srcObject;
+    }
+
+    document.body.appendChild(overlay);
+    callOverlayRef.current = overlay;
+
+    return () => {
+      overlay.remove();
+      callOverlayRef.current = null;
+    };
+  }, [callState.active, callState.incoming, callState.connected, callDuration]);
+
   const endCallUI = () => {
+    // Remove DOM overlay immediately
+    if (callOverlayRef.current) {
+      callOverlayRef.current.remove();
+      callOverlayRef.current = null;
+    }
     if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
        callRecorderRef.current.stop();
        callRecorderRef.current = null;
@@ -348,8 +469,7 @@ const AppContent = () => {
     } catch(e) { endCallUI(); }
   };
 
-  const acceptCall = () => { setCallState(s => ({ ...s, incoming: false, connected: true })); setupWebRTC(callState.type, false, callState.pendingSdp); };
-  const rejectCall = () => { if (sharedKey) encryptMessage(sharedKey, JSON.stringify({type:'call:end'})).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' })); endCallUI(); };
+
   const formatTime = (secs: number) => { const m = Math.floor(secs / 60); const s = secs % 60; return `${m}:${s < 10 ? '0' : ''}${s}`; };
 
   const handleUnlock = (pin: string) => {
@@ -359,153 +479,42 @@ const AppContent = () => {
   };
 
   return (
-    <>
-      <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative">
-        {/* ── ACCESS CONTROL FLOW ── */}
-        {isLoading ? (
-          <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
-             <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          </div>
-        ) : !appConfig ? (
-          <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
-        ) : !isUnlocked ? (
-          <div className="flex-1 relative">
-             <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
-          </div>
-        ) : !isPaired && !isFakeMode ? (
-          <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
-        ) : (
-          /* ── AUTHENTICATED APP CONTENT ── */
-          <>
-            <div className="flex-1 relative overflow-hidden">
-              <AnimatePresence mode="wait">
-                <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
-                  {isFakeMode ? <FakeCalculator /> : (
-                    <Routes location={location}>
-                      <Route path="/"       element={<DashboardScreen />} />
-                      <Route path="/chat"   element={<ChatScreen />} />
-                      <Route path="/vault"  element={<VaultScreen />} />
-                      <Route path="/panic"  element={<PanicScreen />} />
-                      <Route path="/settings" element={<SettingsScreen />} />
-                    </Routes>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-            {!isFakeMode && <BottomNav />}
-          </>
-        )}
-      </div>
-
-      {/* ── ABSOLUTE TOP-LEVEL CALL OVERLAY ── */}
-      {callState.active && (
-        <div 
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            right: 0,
-            bottom: 0,
-            width: '100vw', 
-            height: '100vh', 
-            zIndex: 2147483647, 
-            backgroundColor: '#050505', 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            padding: '24px',
-            textAlign: 'center', 
-            color: 'white',
-            overflow: 'hidden'
-          }}
-        >
-           {/* Visual background flourish */}
-           <div className="absolute inset-0 bg-primary/20 opacity-30 animate-pulse pointer-events-none" />
-           
-           <div className="relative z-[101] flex flex-col items-center w-full max-w-xs">
-              {/* Partner Section */}
-              <div className="w-28 h-28 bg-zinc-900 rounded-[50px] p-1 border-2 border-white/10 shadow-2xl mb-6 flex items-center justify-center overflow-hidden">
-                 <img 
-                   src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`} 
-                   className="w-full h-full object-cover" 
-                   alt="Partner"
-                 />
-              </div>
-
-              <h2 className="text-4xl font-black uppercase tracking-tighter mb-2">{partner?.nick || 'Partner'}</h2>
-              
-              <div className="bg-white/5 border border-white/10 rounded-full px-6 py-2 mb-10">
-                 <p className="text-primary font-black uppercase tracking-[3px] text-[10px]">
-                    {callState.incoming ? 'Incoming Secure Line...' : callState.connected ? `Live Call • ${formatTime(callDuration)}` : 'Initiating...'}
-                 </p>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-row justify-center space-x-12 w-full mt-4">
-                 {callState.incoming ? (
-                   <>
-                     {/* DECLINE */}
-                     <div className="flex flex-col items-center">
-                        <button 
-                          onClick={rejectCall}
-                          className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all text-white border-4 border-red-500/20"
-                        >
-                           <X size={44} strokeWidth={3} />
-                        </button>
-                        <span className="mt-3 text-[10px] font-black tracking-widest uppercase text-white/40">Reject</span>
-                     </div>
-
-                     {/* ANSWER */}
-                     <div className="flex flex-col items-center">
-                        <button 
-                          onClick={acceptCall}
-                          className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all text-white animate-bounce border-4 border-green-500/20"
-                        >
-                           <Phone size={44} strokeWidth={3} />
-                        </button>
-                        <span className="mt-3 text-[10px] font-black tracking-widest uppercase text-white/40">Answer</span>
-                     </div>
-                   </>
-                 ) : (
-                   <div className="flex flex-col items-center">
-                      <button 
-                        onClick={rejectCall}
-                        className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all text-white border-4 border-red-500/20"
-                      >
-                         <Phone size={44} strokeWidth={3} className="rotate-[135deg]" />
-                      </button>
-                      <span className="mt-4 text-[11px] font-black tracking-widest uppercase text-white/40">End Connection</span>
-                   </div>
-                 )}
-              </div>
-           </div>
-
-           {/* Video Feed (Full Screen) */}
-           {callState.type === 'video' && callState.connected && (
-              <div style={{ position: 'fixed', inset: 0, zIndex: -1, backgroundColor: 'black' }}>
-                 <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover opacity-80" />
-                 <video 
-                   ref={localVideoRef} 
-                   autoPlay playsInline muted 
-                   style={{ 
-                     position: 'fixed', 
-                     bottom: 40, 
-                     right: 30, 
-                     width: 130, 
-                     height: 190, 
-                     borderRadius: 32, 
-                     border: '2px solid rgba(255,255,255,0.2)', 
-                     objectFit: 'cover',
-                     boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                     zIndex: 102
-                   }} 
-                 />
-              </div>
-           )}
+    <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative">
+      {/* ── ACCESS CONTROL FLOW ── */}
+      {isLoading ? (
+        <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
+           <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
+      ) : !appConfig ? (
+        <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
+      ) : !isUnlocked ? (
+        <div className="flex-1 relative">
+           <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
+        </div>
+      ) : !isPaired && !isFakeMode ? (
+        <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
+      ) : (
+        /* ── AUTHENTICATED APP CONTENT ── */
+        <>
+          <div className="flex-1 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
+                {isFakeMode ? <FakeCalculator /> : (
+                  <Routes location={location}>
+                    <Route path="/"       element={<DashboardScreen />} />
+                    <Route path="/chat"   element={<ChatScreen />} />
+                    <Route path="/vault"  element={<VaultScreen />} />
+                    <Route path="/panic"  element={<PanicScreen />} />
+                    <Route path="/settings" element={<SettingsScreen />} />
+                  </Routes>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {!isFakeMode && <BottomNav />}
+        </>
       )}
-    </>
+    </div>
   );
 };
 
