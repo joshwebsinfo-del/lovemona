@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Plus, Image as ImageIcon, Video, Mic, FolderOpen, Trash2, Download, X } from 'lucide-react';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
-import { encryptMessage, decryptMessage, importPublicKey, deriveSharedSecret } from '../lib/crypto';
+import { encryptMessage, decryptMessage, importPublicKey, deriveSharedSecret, encryptBuffer, decryptBuffer, base64ToBuffer, bufferToBase64 } from '../lib/crypto';
 
 export const VaultScreen: React.FC = () => {
   const [items, setItems] = useState<{id: string, name: string, type: string, data: string, timestamp: number}[]>([]);
@@ -119,39 +119,38 @@ export const VaultScreen: React.FC = () => {
       const db = await initDB();
       await db.put('vault', newItem);
       
+      // Handle Database Backup for Regular Vault File
       const identity = await db.get('identity', 'me');
       const partner = await db.get('partner', 'partner');
       if (identity && partner) {
          try {
              const pk = await importPublicKey(partner.publicKeyPem);
              const sharedKey = await deriveSharedSecret(identity.privateKey, pk);
-             const enc = await encryptMessage(sharedKey, b64);
+             
+             let dbData = b64;
+             if (file.type.startsWith('video')) {
+                 const arrayBuffer = await new Promise<ArrayBuffer>((res, rej) => {
+                     const fr = new FileReader(); fr.onload = () => res(fr.result as ArrayBuffer); fr.onerror = rej; fr.readAsArrayBuffer(file);
+                 });
+                 const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
+                 const storagePath = `vault/${identity.userId}/${newItem.id}_${file.name}`;
+                 const encBlob = new Blob([encrypted], { type: 'application/octet-stream' });
+                 await supabase.storage.from('media').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
+                 dbData = `storage://${storagePath}::${bufferToBase64(iv.buffer as any)}`;
+             }
+
+             const enc = await encryptMessage(sharedKey, dbData);
              await supabase.from('vault').insert([
-               {
-                 id: newItem.id + "_me",
-                 owner_id: identity.userId,
-                 name: newItem.name,
-                 type: newItem.type,
-                 encrypted_data: enc.encrypted,
-                 iv: enc.iv,
-                 timestamp: newItem.timestamp
-               },
-               {
-                 id: newItem.id + "_partner",
-                 owner_id: partner.userId,
-                 name: newItem.name,
-                 type: newItem.type,
-                 encrypted_data: enc.encrypted,
-                 iv: enc.iv,
-                 timestamp: newItem.timestamp
-               }
+               { id: newItem.id + "_me", owner_id: identity.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp },
+               { id: newItem.id + "_partner", owner_id: partner.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp }
              ]);
-         } catch { /* ignored */ }
+         } catch(e) { console.error('Cloud Vault Upload Error:', e); }
       }
       
       await loadVault();
 
-    } catch {
+    } catch(e) {
+      console.error(e);
       alert('Failed to save to Vault.');
     } finally {
       setIsUploading(false);
@@ -180,6 +179,26 @@ export const VaultScreen: React.FC = () => {
        
        const identity = await db.get('identity', 'me');
        const partner = await db.get('partner', 'partner');
+       
+       let targetMedia = pendingSecretFile.b64;
+       if (pendingSecretFile.type === 'video' && identity && partner) {
+           try {
+               const pk = await importPublicKey(partner.publicKeyPem);
+               const sharedKey = await deriveSharedSecret(identity.privateKey, pk);
+               const arrayBuffer = base64ToBuffer(pendingSecretFile.b64.split(',')[1]);
+               const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
+               const storagePath = `vault/${identity.userId}/${newItem.id}_secret.mp4`;
+               const encBlob = new Blob([encrypted], { type: 'application/octet-stream' });
+               await supabase.storage.from('media').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
+               targetMedia = `storage://${storagePath}::${bufferToBase64(iv.buffer as any)}`;
+           } catch (e) {
+               console.error("Storage vault error", e);
+           }
+       }
+
+       newItem.data = JSON.stringify({ password: secretPassword, mediaData: targetMedia, actualType: pendingSecretFile.type });
+       await db.put('vault', newItem);
+       
        if (identity && partner) {
           try {
               const pk = await importPublicKey(partner.publicKeyPem);
@@ -189,7 +208,7 @@ export const VaultScreen: React.FC = () => {
                 { id: newItem.id + "_me", owner_id: identity.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp },
                 { id: newItem.id + "_partner", owner_id: partner.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp }
               ]);
-          } catch { /* ignored */ }
+          } catch(e) { console.error('Drop Ins:', e) }
        }
        await loadVault();
      } catch {
@@ -457,20 +476,9 @@ export const VaultScreen: React.FC = () => {
                   </button>
                </div>
 
-               <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
-                  {viewItem.type === 'photo' && <img src={viewItem.data} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />}
-                  {viewItem.type === 'video' && <video src={viewItem.data} controls autoPlay className="max-w-full max-h-full rounded-lg shadow-2xl" />}
-                  {viewItem.type === 'voice' && (
-                     <div className="w-full max-w-sm bg-white/10 p-8 rounded-[32px] border border-white/10 flex flex-col items-center">
-                        <div className="w-24 h-24 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-6">
-                           <Mic size={40} />
-                        </div>
-                        <audio src={viewItem.data} controls className="w-full" />
-                     </div>
-                  )}
-               </div>
+               <VaultItemViewer item={viewItem} />
 
-               <div className="pb-12 pt-6 px-8 flex justify-center space-x-6 glass">
+               <div className="pb-12 pt-6 px-8 flex justify-center space-x-6 glass mt-auto">
                   <button onClick={() => deleteItem(viewItem.id)} className="w-14 h-14 bg-red-500/20 text-red-500 border border-red-500/30 rounded-full flex items-center justify-center active:scale-95 transition-transform">
                      <Trash2 size={22} />
                   </button>
@@ -484,4 +492,55 @@ export const VaultScreen: React.FC = () => {
       </AnimatePresence>
     </div>
   );
+};
+
+// Specialized Viewer to handle dynamically stream-decrypting large objects hosted in Storage
+const VaultItemViewer = ({ item }: { item: { type: string, data: string } }) => {
+   const [src, setSrc] = useState(item.data);
+   const [loading, setLoading] = useState(item.data.startsWith('storage://'));
+
+   useEffect(() => {
+      const loadFromStorage = async () => {
+         if (!item.data.startsWith('storage://')) return;
+         setLoading(true);
+         try {
+            const parts = item.data.replace('storage://', '').split('::');
+            const path = parts[0];
+            const ivStr = parts[1];
+            
+            const db = await initDB();
+            const identity = await db.get('identity', 'me');
+            const partner = await db.get('partner', 'partner');
+            if (identity && partner) {
+                const pk = await importPublicKey(partner.publicKeyPem);
+                const sharedKey = await deriveSharedSecret(identity.privateKey, pk);
+                
+                const { data: blob } = await supabase.storage.from('media').download(path);
+                if (blob) {
+                   const dec = await decryptBuffer(sharedKey, await blob.arrayBuffer(), new Uint8Array(base64ToBuffer(ivStr)));
+                   setSrc(URL.createObjectURL(new Blob([dec], { type: 'video/mp4' })));
+                }
+            }
+         } catch(e) { console.error('Vault video storage fetch failed', e); }
+         finally { setLoading(false); }
+      };
+      loadFromStorage();
+   }, [item.data]);
+
+   if (loading) return <div className="flex-1 flex items-center justify-center text-white font-bold animate-pulse">Decrypting Heavy Media...</div>;
+
+   return (
+      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden relative">
+         {item.type === 'photo' && <img src={src} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />}
+         {item.type === 'video' && <video src={src} controls autoPlay playsInline className="max-w-full max-h-full rounded-lg shadow-2xl bg-black" />}
+         {item.type === 'voice' && (
+            <div className="w-full max-w-sm bg-white/10 p-8 rounded-[32px] border border-white/10 flex flex-col items-center">
+               <div className="w-24 h-24 bg-primary/20 text-primary rounded-full flex items-center justify-center mb-6">
+                  <Mic size={40} />
+               </div>
+               <audio src={src} controls className="w-full" />
+            </div>
+         )}
+      </div>
+   );
 };
