@@ -996,13 +996,13 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a0a0c] z-0 pointer-events-none" />
       
       {/* ── TOP HEADER ── */}
-      <div className="fixed top-0 w-full z-30 bg-black/60 backdrop-blur-xl border-b border-white/5 shadow-2xl px-5 py-3.5 flex items-center justify-between">
+      <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/95 border-b border-white/5 shadow-2xl px-5 py-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className="relative">
-            {/* Animated online pulse */}
-            <div className="absolute inset-0 bg-primary/30 rounded-full animate-ping" />
+            {/* Online indicator dot */}
+            {partnerOnline && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0c] z-10" />}
             <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
-              <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" />
+              <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" loading="lazy" />
             </div>
             <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
           </div>
@@ -1073,14 +1073,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         {messages.map((msg, i) => {
           const isMe = msg.senderId === myUserId;
           const showTail = i === messages.length - 1 || messages[i + 1].senderId !== msg.senderId;
+          const isNew = i >= messages.length - 3; // Only animate last 3 messages
 
           return (
-               <motion.div
+               <div
                 key={msg.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.12 }}
-                className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full ${isNew ? 'animate-fade-in' : ''}`}
               >
                 <div
                   onClick={() => handleMessageTap(msg.id)}
@@ -1094,9 +1092,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   {renderMessageContent(msg.text)}
                 
                 {msg.reaction && (
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className={`absolute -bottom-3 ${isMe ? '-left-2' : '-right-2'} text-xl bg-[#0a0a0c] border border-white/10 rounded-full px-1.5 py-0.5 shadow-2xl`}>
+                  <div className={`absolute -bottom-3 ${isMe ? '-left-2' : '-right-2'} text-xl bg-[#0a0a0c] border border-white/10 rounded-full px-1.5 py-0.5 shadow-2xl animate-fade-in`}>
                     {msg.reaction}
-                  </motion.div>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-end mt-1 space-x-1.5 opacity-60">
@@ -1106,7 +1104,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   {isMe && <span className="text-[10px] tracking-tighter">✓✓</span>}
                 </div>
               </div>
-            </motion.div>
+            </div>
           );
         })}
 
