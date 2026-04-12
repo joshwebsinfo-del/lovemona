@@ -16,56 +16,59 @@ export const VaultScreen: React.FC = () => {
   const [pendingSecretFile, setPendingSecretFile] = useState<{ b64: string, name: string, type: string } | null>(null);
   const [secretPassword, setSecretPassword] = useState('');
   const [unlockPrompt, setUnlockPrompt] = useState<any | null>(null);
-  const [unlockPassword, setUnlockPassword] = useState('');
+  const [unlockPassword, setUnlockPassword] = useState(''); const [isSyncing, setIsSyncing] = useState(false); const [syncProgress, setSyncProgress] = useState(0); const [secretFilter, setSecretFilter] = useState<'all' | 'me' | 'partner'>('all');
+
 
   const loadVault = async () => {
     const db = await initDB();
     const identity = await db.get('identity', 'me');
     const partner = await db.get('partner', 'partner');
-    
     if (identity && partner) {
-       try {
-           const importedPartnerKey = await importPublicKey(partner.publicKeyPem);
-           const sharedKey = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
-
-           const { data: cloudItems } = await supabase.from('vault').select('*').eq('owner_id', identity.userId);
-           if (cloudItems) {
-              for (const ci of cloudItems) {
-                 const existing = await db.get('vault', ci.id);
-                 if (!existing) {
-                    try {
-                       const dec = await decryptMessage(sharedKey, ci.encrypted_data, ci.iv);
-                       await db.put('vault', {
-                          id: ci.id,
-                          name: ci.name,
-                          type: ci.type,
-                          data: dec,
-                          timestamp: ci.timestamp,
-                          locked: true
-                       });
-                    } catch { /* ignored */ }
-                 }
-              }
-           }
-       } catch (e: unknown) { console.error('Vault sync error', e); }
+      setIsSyncing(true);
+      setSyncProgress(0);
+      try {
+        const pk = await importPublicKey(partner.publicKeyPem);
+        const sk = await deriveSharedSecret(identity.privateKey, pk);
+        const { data: cloud } = await supabase.from('vault').select('*').eq('owner_id', identity.userId);
+        if (cloud && cloud.length > 0) {
+          for (let i = 0; i < cloud.length; i++) {
+            setSyncProgress(Math.round(((i + 1) / cloud.length) * 100));
+            const ex = await db.get('vault', cloud[i].id);
+            if (!ex) {
+              try {
+                const dec = await decryptMessage(sk, cloud[i].encrypted_data, cloud[i].iv);
+                await db.put('vault', {
+                  id: cloud[i].id,
+                  name: cloud[i].name,
+                  type: cloud[i].type,
+                  data: dec,
+                  timestamp: cloud[i].timestamp,
+                  locked: true
+                });
+              } catch { }
+            }
+          }
+        }
+      } catch { } finally {
+        setIsSyncing(false);
+        setSyncProgress(100);
+      }
     }
-
-    const vaultItems = await db.getAll('vault') || [];
-    setItems(vaultItems.sort((a, b) => b.timestamp - a.timestamp));
+    const vItems = await db.getAll('vault') || [];
+    setItems(vItems.sort((a, b) => b.timestamp - a.timestamp));
   };
 
   useEffect(() => {
     loadVault();
-    
     // Listen for Realtime Secret Drops and Uploads from partner
     const channel = supabase.channel('vault_sync')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault' }, () => {
-          loadVault(); // trigger immediate local sync and render
+        loadVault();
       })
       .subscribe();
-      
     return () => { supabase.removeChannel(channel); };
   }, []);
+
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -309,15 +312,35 @@ export const VaultScreen: React.FC = () => {
     document.body.removeChild(a);
   };
 
-  const filteredItems = activeCategory ? items.filter(i => i.type === activeCategory) : [];
+   const filteredItems = activeCategory ? items.filter(i => { if (i.type !== activeCategory) return false; if (activeCategory === 'secret') { if (secretFilter === 'me') return i.id.endsWith('_me'); if (secretFilter === 'partner') return i.id.endsWith('_partner'); } return true; }) : [];
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] no-scrollbar overflow-y-auto w-full">
       <div className="pt-20 px-6 pb-6 relative flex flex-col items-center">
-        <h1 className="text-2xl font-semibold text-white mb-1">
-           {activeCategory ? (activeCategory === 'photo' ? 'Photos' : activeCategory === 'video' ? 'Videos' : activeCategory === 'secret' ? 'Secret Drops' : 'Voice Notes') : 'Memory Vault 🔒'}
-        </h1>
-        <p className="text-sm text-white/40">{activeCategory ? 'Your private collection' : 'Locally Encrypted & Secure'}</p>
+         <h1 className="text-2xl font-semibold text-white mb-1">
+            {activeCategory ? (activeCategory === 'photo' ? 'Photos' : activeCategory === 'video' ? 'Videos' : activeCategory === 'secret' ? 'Secret Drops' : 'Voice Notes') : 'Memory Vault 🔒'}
+         </h1>
+         <p className="text-sm text-white/40">{activeCategory ? 'Your private collection' : 'Locally Encrypted & Secure'}</p>
+         
+         <AnimatePresence>
+            {isSyncing && (
+               <motion.div 
+                 initial={{ opacity: 0, height: 0 }}
+                 animate={{ opacity: 1, height: 'auto' }}
+                 exit={{ opacity: 0, height: 0 }}
+                 className="w-full max-w-xs mt-4 overflow-hidden"
+               >
+                  <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                     <motion.div 
+                        className="h-full bg-primary shadow-[0_0_10px_rgba(var(--primary-rgb),0.5)]"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${syncProgress}%` }}
+                     />
+                  </div>
+                  <p className="text-[10px] text-white/20 uppercase tracking-widest mt-1.5 font-bold text-center">Syncing Vault: {syncProgress}%</p>
+               </motion.div>
+            )}
+         </AnimatePresence>
         
         {!activeCategory && items.length > 0 && (
            <button 
@@ -392,6 +415,14 @@ export const VaultScreen: React.FC = () => {
             >
                <span className="mr-2">←</span> Back to Folders
             </button>
+
+            {activeCategory === 'secret' && (
+               <div className="flex bg-white/5 p-1 rounded-2xl mb-8 border border-white/10">
+                  <button onClick={() => setSecretFilter('all')} className={`flex-1 py-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${secretFilter === 'all' ? 'bg-white text-black shadow-lg' : 'text-white/40'}`}>All</button>
+                  <button onClick={() => setSecretFilter('me')} className={`flex-1 py-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${secretFilter === 'me' ? 'bg-white text-black shadow-lg' : 'text-white/40'}`}>From Me</button>
+                  <button onClick={() => setSecretFilter('partner')} className={`flex-1 py-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all ${secretFilter === 'partner' ? 'bg-white text-black shadow-lg' : 'text-white/40'}`}>By Her</button>
+               </div>
+            )}
 
             {filteredItems.length === 0 ? (
                <div className="flex flex-col items-center justify-center py-20 text-white/20 text-center">
