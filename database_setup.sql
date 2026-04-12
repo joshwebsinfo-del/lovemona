@@ -44,44 +44,33 @@ CREATE TABLE IF NOT EXISTS vault (
     timestamp BIGINT NOT NULL
 );
 
--- If you ran a previous version of this script, these lines will safely add any missing columns:
+-- Add missing columns if existing table
 ALTER TABLE vault ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 
--- 5. Enable pure Realtime broadcasting
+-- 5. Enable Realtime broadcasting
 DO $$
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_publication_tables
-        WHERE pubname = 'supabase_realtime' AND tablename = 'messages'
-    ) THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'messages') THEN
         EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE messages';
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_publication_tables
-        WHERE pubname = 'supabase_realtime' AND tablename = 'vault'
-    ) THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'vault') THEN
         EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE vault';
     END IF;
 END $$;
 
-
--- 6. Disable RLS for smooth client-side cryptography syncing
+-- 6. Disable RLS for peer-to-peer sync
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE partnerships DISABLE ROW LEVEL SECURITY;
 ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE vault DISABLE ROW LEVEL SECURITY;
 
--- 7. Create the Storage Bucket for Video Notes and Vault Media
+-- 7. Create the Storage Bucket
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('vault', 'vault', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Give public access to the bucket for all users (required for the app's crypto-first sync)
+-- Storage Policy
 DROP POLICY IF EXISTS "Public Access" ON storage.objects;
 CREATE POLICY "Public Access" ON storage.objects FOR ALL USING ( bucket_id = 'vault' );
-
-

@@ -23,7 +23,9 @@ export const VaultScreen: React.FC = () => {
     const db = await initDB();
     const identity = await db.get('identity', 'me');
     const partner = await db.get('partner', 'partner');
+    
     if (identity && partner) {
+      console.log("Vault Sync: Me=" + identity.userId + " Partner=" + partner.userId);
       setIsSyncing(true);
       setSyncProgress(0);
       try {
@@ -32,6 +34,7 @@ export const VaultScreen: React.FC = () => {
         const { data: cloud } = await supabase.from('vault').select('*').eq('owner_id', identity.userId);
         if (cloud && cloud.length > 0) {
           for (let i = 0; i < cloud.length; i++) {
+            console.log("Syncing item:", cloud[i].id);
             setSyncProgress(Math.round(((i + 1) / cloud.length) * 100));
             const ex = await db.get('vault', cloud[i].id);
             if (!ex) {
@@ -124,7 +127,7 @@ export const VaultScreen: React.FC = () => {
         locked: true
       };
 
-      const db = await initDB();
+   const clearAllVault = async () => { if (!confirm('?? NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return; const db = await initDB();
       await db.put('vault', newItem);
       
       // Handle Database Backup for Regular Vault File
@@ -182,7 +185,7 @@ export const VaultScreen: React.FC = () => {
          locked: true
        };
        
-       const db = await initDB();
+    const clearAllVault = async () => { if (!confirm('?? NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return; const db = await initDB();
        await db.put('vault', newItem);
        
        const identity = await db.get('identity', 'me');
@@ -247,7 +250,7 @@ export const VaultScreen: React.FC = () => {
    const deleteItem = async (id: string, e?: React.MouseEvent) => {
      if (e) e.stopPropagation();
      if (confirm('Permanently delete from vault?')) {
-       const db = await initDB();
+    const clearAllVault = async () => { if (!confirm('?? NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return; const db = await initDB();
        
        // Handle Storage Cleanup
        const item = await db.get('vault', id);
@@ -270,10 +273,8 @@ export const VaultScreen: React.FC = () => {
      }
    };
 
-   const clearAllVault = async () => {
-     if (!confirm('☢️ NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return;
-     
-     const db = await initDB();
+   const clearAllVault = async () => { if (!confirm('?? NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return; const db = await initDB();
+
      const allItems = await db.getAll('vault');
      const identity = await db.get('identity', 'me');
 
@@ -617,7 +618,7 @@ const VaultItemViewer = ({ item }: { item: { type: string, data: string } }) => 
             const path = parts[0];
             const ivStr = parts[1];
             
-            const db = await initDB();
+         const clearAllVault = async () => { if (!confirm('?? NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return; const db = await initDB();
             const identity = await db.get('identity', 'me');
             const partner = await db.get('partner', 'partner');
             if (identity && partner) {
