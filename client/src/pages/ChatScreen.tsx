@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Navigation } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Navigation, Activity } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -1172,10 +1172,21 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                       <AnimatePresence>
                          {showLocationMenu && (
                             <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
-                               <p className="text-[10px] text-white/30 uppercase tracking-widest font-black px-3 py-1">Share Your Spot</p>
-                               <button onClick={() => handleLocationDrop(0.25)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">15 Mins <Navigation size={12} className="opacity-40" /></button>
-                               <button onClick={() => handleLocationDrop(1)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">1 Hour <Navigation size={12} className="opacity-40" /></button>
-                               <button onClick={() => handleLocationDrop(8)} className="text-left px-3 py-2 text-white text-xs hover:bg-white/10 rounded-xl transition-colors font-bold uppercase tracking-widest flex items-center justify-between">8 Hours <Navigation size={12} className="opacity-40" /></button>
+                               <p className="text-[10px] text-white/30 uppercase tracking-widest font-black px-3 py-1">Live Location Time</p>
+                               <div className="grid grid-cols-2 gap-1 px-1">
+                                  <button onClick={() => handleLocationDrop(0.25)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">15m</button>
+                                  <button onClick={() => handleLocationDrop(0.5)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">30m</button>
+                                  <button onClick={() => handleLocationDrop(1)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">1h</button>
+                                  <button onClick={() => handleLocationDrop(8)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">8h</button>
+                               </div>
+                               <div className="h-px bg-white/5 my-1 mx-2" />
+                               <button onClick={() => {
+                                  const mins = prompt('How many minutes would you like to share?');
+                                  if (mins && !isNaN(parseInt(mins))) handleLocationDrop(parseInt(mins) / 60);
+                               }} className="mx-1 py-2 text-white/60 hover:text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 bg-white/5 rounded-xl transition-all hover:bg-white/10">
+                                  <Activity size={12} />
+                                  <span>Custom Minutes</span>
+                               </button>
                             </motion.div>
                          )}
                       </AnimatePresence>
