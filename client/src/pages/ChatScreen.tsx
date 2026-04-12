@@ -782,15 +782,14 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
   const startVideoNote = async () => {
     try {
-      // Apply safe ideal bounds to prevent iOS from recording 4K footage and crashing WebCrypto memory limits
+      // Safely bound the resolution to avoid OutOfMemory on older mobile devices
       const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'user', width: { max: 720 }, height: { max: 720 } }, 
+          video: { facingMode: 'user', width: { ideal: 480, max: 640 }, height: { ideal: 480, max: 640 } }, 
           audio: { echoCancellation: true, noiseSuppression: true } 
       });
       
-      // Let the browser choose the native OS codec (fixes Safari 'video/webm' crash)
-      // Provide a 2.5 Mbps bitrate constraint for safety
-      const mr = new MediaRecorder(stream, { videoBitsPerSecond: 2500000 });
+      // Let the browser choose the native OS codec and bound bitrate to 1Mbps max
+      const mr = new MediaRecorder(stream, { videoBitsPerSecond: 1000000 });
       mediaRecorderRef.current = mr;
       audioChunksRef.current = [];
       
@@ -810,11 +809,21 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
             let payload: ChatPayload;
             
             if (sharedKey) {
-               const arrayBuffer = await file.arrayBuffer();
-               const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer as any);
+               // Use standard FileReader which is bulletproof on absolute iOS versions
+               const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+                   const reader = new FileReader();
+                   reader.onload = () => resolve(reader.result as ArrayBuffer);
+                   reader.onerror = reject;
+                   reader.readAsArrayBuffer(file);
+               });
+               
+               const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
                const storagePath = `media/${myUserId}/${msgId}_${file.name}`;
                const ivB64 = bufferToBase64(iv.buffer as any);
-               const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encrypted);
+               
+               // Wrap the encrypted ArrayBuffer into a perfectly compliant Blob for Supabase
+               const encryptedBlob = new Blob([encrypted], { type: 'application/octet-stream' });
+               const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encryptedBlob, { contentType: 'application/octet-stream' });
                if (storageErr) throw storageErr;
                
                payload = { type: 'media', text: 'Video Note', mediaType: mimeType, storagePath, storageIv: ivB64 };
@@ -825,9 +834,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                await db.put('messages', msg);
                await sendSecurePayload(payload, msgId);
             }
-         } catch(e) {
+         } catch(e: any) {
             console.error('VideoNote Error:', e);
-            alert('Failed to send Video Note. The file might be too large or the connection dropped.');
+            const errDetails = e?.message || JSON.stringify(e) || 'Unknown Crash';
+            alert(`Video Note Failed: ${errDetails}. Try sending a shorter video.`);
          } finally {
             setIsProcessingMedia(false);
          }
