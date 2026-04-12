@@ -599,70 +599,67 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     );
   };
 
-  // ── PHOTO UPLOAD ──
+  // ── PHOTO/VIDEO UPLOAD ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (fileInputRef.current) fileInputRef.current.value = '';
 
     setIsProcessingMedia(true);
 
-    const compressImage = (f: File): Promise<string> => {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.src = URL.createObjectURL(f);
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_SIZE = 1200;
-          let { width, height } = img;
-          if (width > height && width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
-          else if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
-          canvas.width = width; canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7)); 
-        };
-        img.onerror = reject;
-      });
-    };
-
     try {
+      if (!sharedKey) throw new Error('Not paired yet');
       const db = await initDB();
       const msgId = Date.now().toString();
+      const isVideo = file.type.startsWith('video');
+      const isImage = file.type.startsWith('image');
 
-      let payload: ChatPayload;
-      
-      let b64 = '';
-      // If file is > 1MB, use Supabase Storage
-      if (file.size > 1024 * 1024) {
-         const arrayBuffer = await file.arrayBuffer();
-         if (!sharedKey) throw new Error("No shared key");
-         const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer as any);
-         const storagePath = `vault/${myUserId}/${msgId}_${file.name}`;
-         const ivB64 = bufferToBase64(iv.buffer as any);
+      // ── HIGH QUALITY image compression (keeps detail, just limits dimensions) ──
+      const getImageB64 = (f: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX = 1800;
+            let { width, height } = img;
+            if (width > height && width > MAX) { height *= MAX / width; width = MAX; }
+            else if (height > MAX) { width *= MAX / height; height = MAX; }
+            canvas.width = width; canvas.height = height;
+            canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+          };
+          img.onerror = reject;
+          img.src = URL.createObjectURL(f);
+        });
+      };
 
-         // Upload encrypted blob to storage
-         const { error: storageErr } = await supabase.storage.from('vault').upload(storagePath, encrypted);
-         if (storageErr) {
-            console.error('Storage upload failed:', storageErr);
-            // Fallback to compressed b64 if storage fails
-            b64 = await compressImage(file);
-            payload = { type: 'media', text: file.name, mediaType: file.type || 'image/jpeg', mediaData: b64 };
-         } else {
-            payload = { type: 'media', text: file.name, mediaType: file.type, storagePath, storageIv: ivB64 };
-            // For vault backup of large files, we still use compressed b64 for thumbnail/preview
-            b64 = await compressImage(file);
-         }
-      } else {
-         b64 = file.type.startsWith('video/') 
-            ? await new Promise<string>((resolve, reject) => {
-               const reader = new FileReader();
-               reader.onload = () => resolve(reader.result as string);
-               reader.onerror = reject;
-               reader.readAsDataURL(file);
-            })
-            : await compressImage(file);
-         
-         payload = { type: 'media', text: file.name, mediaType: file.type || 'image/jpeg', mediaData: b64 };
+      // ── Step 1: Upload raw encrypted file to Supabase Storage ──
+      const arrayBuffer = await file.arrayBuffer();
+      const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
+      const storagePath = `vault/${myUserId}/${msgId}_${file.name}`;
+      const ivB64 = bufferToBase64(iv.buffer as ArrayBuffer);
+
+      const { error: storageErr } = await supabase.storage
+        .from('vault')
+        .upload(storagePath, new Blob([encrypted], { type: 'application/octet-stream' }), { contentType: 'application/octet-stream' });
+
+      if (storageErr) throw new Error('Storage upload failed: ' + storageErr.message);
+
+      // ── Step 2: Send chat message with storage pointer ──
+      const payload: ChatPayload = {
+        type: 'media',
+        text: file.name,
+        mediaType: file.type || (isImage ? 'image/jpeg' : 'video/mp4'),
+        storagePath,
+        storageIv: ivB64,
+      };
+
+      // Also generate a preview thumbnail for images (for inline chat display)
+      if (isImage) {
+        try {
+          const thumb = await getImageB64(file);
+          (payload as any).mediaData = thumb;
+        } catch {}
       }
 
       const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
@@ -671,43 +668,29 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       await db.put('messages', msg);
       await sendSecurePayload(payload, msgId);
 
-      // Also backup image to Supabase Vault for both partners
-      if (!sharedKey) return;
-      const encMedia = await encryptMessage(sharedKey, b64);
-      const vType = file.type.startsWith('video') ? 'video' : 'photo';
-      
-      await db.put('vault', {
-         id: msgId + '_me', name: file.name, type: vType, data: b64, timestamp: Date.now(), locked: true
-      });
-      
-      await supabase.from('vault').insert([
-         {
-            id: msgId + '_me', 
-            owner_id: myUserId, 
-            name: file.name, 
-            type: vType, 
-            encrypted_data: encMedia.encrypted, 
-            iv: encMedia.iv,
-            timestamp: Date.now()
-         },
-         {
-            id: msgId + '_partner', 
-            owner_id: partnerInfo.userId, 
-            name: file.name, 
-            type: vType, 
-            encrypted_data: encMedia.encrypted, 
-            iv: encMedia.iv,
-            timestamp: Date.now()
-         }
-      ]);
+      // ── Step 3: Vault backup for both partners ──
+      const vType = isVideo ? 'video' : 'photo';
+      const storagePointer = `storage://${storagePath}::${ivB64}`;
+      const previewData = isImage ? ((payload as any).mediaData || storagePointer) : storagePointer;
 
-    } catch {
-      alert('Failed to process image. Try a smaller file.');
+      await db.put('vault', { id: msgId + '_me', name: file.name, type: vType, data: previewData, timestamp: Date.now(), locked: true });
+
+      try {
+        const encVault = await encryptMessage(sharedKey, storagePointer);
+        await supabase.from('vault').insert([
+          { id: msgId + '_me', owner_id: myUserId, name: file.name, type: vType, encrypted_data: encVault.encrypted, iv: encVault.iv, timestamp: Date.now() },
+          { id: msgId + '_partner', owner_id: partnerInfo.userId, name: file.name, type: vType, encrypted_data: encVault.encrypted, iv: encVault.iv, timestamp: Date.now() },
+        ]);
+      } catch (vErr) { console.error('Vault backup error:', vErr); }
+
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      alert('Upload failed: ' + (err?.message || 'Unknown error'));
     } finally {
       setIsProcessingMedia(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
+
 
   // ── VOICE NOTES ──
   const startRecording = async () => {
