@@ -207,9 +207,7 @@ const AppContent = () => {
                     await acquireVideoTrack('user');
                   }
                   const answer = await pcRef.current.createAnswer();
-                  let sdp = answer.sdp;
-                  if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
-                  await pcRef.current.setLocalDescription({ ...answer, sdp });
+                  await pcRef.current.setLocalDescription(answer);
                   const enc = await encryptMessage(sharedKey, JSON.stringify({type:'call:answer', sdp: pcRef.current.localDescription}));
                   getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
                }
@@ -313,7 +311,7 @@ const AppContent = () => {
   const acquireVideoTrack = async (mode: 'user' | 'environment') => {
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: mode, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 60, min: 30 } } 
+          video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
       });
       const newVideoTrack = newStream.getVideoTracks()[0];
 
@@ -346,7 +344,7 @@ const AppContent = () => {
     iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
+          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
        });
        localStreamRef.current = stream;
@@ -414,17 +412,13 @@ const AppContent = () => {
        };
        if (isInitiator) {
           const offer = await pc.createOffer();
-          let sdp = offer.sdp;
-          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
-          await pc.setLocalDescription({ ...offer, sdp });
+          await pc.setLocalDescription(offer);
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
        } else if (remoteSdp) {
           await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
           const answer = await pc.createAnswer();
-          let sdp = answer.sdp;
-          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
-          await pc.setLocalDescription({ ...answer, sdp });
+          await pc.setLocalDescription(answer);
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:answer', sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
           while (iceCandidateQueue.current.length > 0) { const cand = iceCandidateQueue.current.shift(); await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(()=>{}); }
