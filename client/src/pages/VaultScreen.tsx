@@ -135,7 +135,7 @@ export const VaultScreen: React.FC = () => {
                  const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
                  const storagePath = `vault/${identity.userId}/${newItem.id}_${file.name}`;
                  const encBlob = new Blob([encrypted], { type: 'application/octet-stream' });
-                 await supabase.storage.from('media').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
+                 await supabase.storage.from('vault').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
                  dbData = `storage://${storagePath}::${bufferToBase64(iv.buffer as any)}`;
              }
 
@@ -189,7 +189,7 @@ export const VaultScreen: React.FC = () => {
                const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
                const storagePath = `vault/${identity.userId}/${newItem.id}_secret.mp4`;
                const encBlob = new Blob([encrypted], { type: 'application/octet-stream' });
-               await supabase.storage.from('media').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
+               await supabase.storage.from('vault').upload(storagePath, encBlob, { contentType: 'application/octet-stream' });
                targetMedia = `storage://${storagePath}::${bufferToBase64(iv.buffer as any)}`;
            } catch (e) {
                console.error("Storage vault error", e);
@@ -515,7 +515,7 @@ const VaultItemViewer = ({ item }: { item: { type: string, data: string } }) => 
                 const pk = await importPublicKey(partner.publicKeyPem);
                 const sharedKey = await deriveSharedSecret(identity.privateKey, pk);
                 
-                const { data: blob } = await supabase.storage.from('media').download(path);
+                const { data: blob } = await supabase.storage.from('vault').download(path);
                 if (blob) {
                    const dec = await decryptBuffer(sharedKey, await blob.arrayBuffer(), new Uint8Array(base64ToBuffer(ivStr)));
                    setSrc(URL.createObjectURL(new Blob([dec], { type: 'video/mp4' })));

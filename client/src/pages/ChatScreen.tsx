@@ -62,7 +62,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
       if (pl.storagePath && pl.storageIv && !src) {
          const loadBlob = async () => {
             try {
-               const { data, error } = await supabase.storage.from('media').download(pl.storagePath!);
+               const { data, error } = await supabase.storage.from('vault').download(pl.storagePath!);
                if (error) throw error;
                if (sharedKey) {
                   const iv = new Uint8Array(base64ToBuffer(pl.storageIv!));
@@ -617,11 +617,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          const arrayBuffer = await file.arrayBuffer();
          if (!sharedKey) throw new Error("No shared key");
          const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer as any);
-         const storagePath = `media/${myUserId}/${msgId}_${file.name}`;
+         const storagePath = `vault/${myUserId}/${msgId}_${file.name}`;
          const ivB64 = bufferToBase64(iv.buffer as any);
 
          // Upload encrypted blob to storage
-         const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encrypted);
+         const { error: storageErr } = await supabase.storage.from('vault').upload(storagePath, encrypted);
          if (storageErr) {
             console.error('Storage upload failed:', storageErr);
             // Fallback to compressed b64 if storage fails
@@ -818,12 +818,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                });
                
                const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
-               const storagePath = `media/${myUserId}/${msgId}_${file.name}`;
+               const storagePath = `vault/${myUserId}/${msgId}_${file.name}`;
                const ivB64 = bufferToBase64(iv.buffer as any);
                
                // Wrap the encrypted ArrayBuffer into a perfectly compliant Blob for Supabase
                const encryptedBlob = new Blob([encrypted], { type: 'application/octet-stream' });
-               const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encryptedBlob, { contentType: 'application/octet-stream' });
+               const { error: storageErr } = await supabase.storage.from('vault').upload(storagePath, encryptedBlob, { contentType: 'application/octet-stream' });
                if (storageErr) throw storageErr;
                
                payload = { type: 'media', text: 'Video Note', mediaType: mimeType, storagePath, storageIv: ivB64 };
@@ -837,7 +837,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          } catch(e: any) {
             console.error('VideoNote Error:', e);
             const errDetails = e?.message || JSON.stringify(e) || 'Unknown Crash';
-            alert(`Video Note Failed: ${errDetails}. Try sending a shorter video.`);
+            alert(`Video Note Error: ${errDetails}. Please ensure you have a "vault" storage bucket created in Supabase with Public access.`);
          } finally {
             setIsProcessingMedia(false);
          }
