@@ -108,6 +108,7 @@ const AppContent = () => {
   const [remoteFilter, setRemoteFilter] = useState('none');
   const [reactions, setReactions] = useState<{id: string, emoji: string, x: number}[]>([]);
   const [videoUpgradeRequested, setVideoUpgradeRequested] = useState(false);
+  const [lastIncomingGameEvent, setLastIncomingGameEvent] = useState<any>(null);
 
   const FILTERS = ['none', 'grayscale(100%)', 'sepia(80%)', 'saturate(200%)', 'hue-rotate(90deg)', 'contrast(150%)', 'invert(100%)'];
 
@@ -174,6 +175,7 @@ const AppContent = () => {
        setLocalFilterIndex(0);
        setRemoteFilter('none');
        setVideoUpgradeRequested(false);
+       setLastIncomingGameEvent(null);
        setupWebRTC(type || 'video', true, undefined, 'user');
     };
 
@@ -255,6 +257,8 @@ const AppContent = () => {
              }
           } else if (payload.type === 'call:upgrade_decline') {
              setVideoUpgradeRequested(false);
+          } else if (payload.type === 'call:game') {
+             setLastIncomingGameEvent(payload.data);
           }
        } catch {}
     };
@@ -288,6 +292,7 @@ const AppContent = () => {
        setCallDuration(0);
        setReactions([]);
        setVideoUpgradeRequested(false);
+       setLastIncomingGameEvent(null);
     }
   }, [callActive, callIncoming, callConnected]);
 
@@ -304,6 +309,7 @@ const AppContent = () => {
     setCallConnected(false);
     setCallPendingSdp(null);
     setCallDuration(0);
+    setLastIncomingGameEvent(null);
     iceCandidateQueue.current = [];
   };
 
@@ -515,6 +521,14 @@ const AppContent = () => {
     }
   };
 
+  const handleGameEventSend = (payload: any) => {
+    if (sharedKey && partner?.userId) {
+       encryptMessage(sharedKey, JSON.stringify({ type: 'call:game', data: payload })).then(enc => 
+           getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' })
+       );
+    }
+  };
+
   const handleUnlock = (pin: string) => {
     if (!appConfig) return;
     navigator.mediaDevices?.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
@@ -553,6 +567,8 @@ const AppContent = () => {
           onUpgradeRequest={handleUpgradeRequest}
           onUpgradeAccept={handleUpgradeAccept}
           onUpgradeDecline={handleUpgradeDecline}
+          lastIncomingGameEvent={lastIncomingGameEvent}
+          onSendGameEvent={handleGameEventSend}
         />
       </>
     );

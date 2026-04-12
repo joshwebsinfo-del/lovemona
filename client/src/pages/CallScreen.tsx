@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, Video, Wand2, PhoneOff } from 'lucide-react';
+import { Camera, Video, Wand2, PhoneOff, Gamepad2, X } from 'lucide-react';
 import './CallScreen.css';
 
 interface CallScreenProps {
@@ -24,7 +24,12 @@ interface CallScreenProps {
   onUpgradeRequest: () => void;
   onUpgradeAccept: () => void;
   onUpgradeDecline: () => void;
+  lastIncomingGameEvent: any;
+  onSendGameEvent: (payload: any) => void;
 }
+
+const GAME_REACTION = 'reaction';
+const REACTION_EMOJIS = ['❤️', '😍', '🔥', '💋', '✨'];
 
 const FILTER_OPTIONS = [
   { name: 'Normal', value: 'none' },
@@ -64,13 +69,80 @@ export function CallScreen({
   onUpgradeRequest,
   onUpgradeAccept,
   onUpgradeDecline,
+  lastIncomingGameEvent,
+  onSendGameEvent,
 }: CallScreenProps) {
   const [showFilters, setShowFilters] = useState(false);
+  const [showGames, setShowGames] = useState(false);
+  
+  const [activeGame, setActiveGame] = useState<string | null>(null);
+  const [isGameHost, setIsGameHost] = useState(false);
+  const [rrTarget, setRrTarget] = useState<string | null>(null);
+  const [rrScores, setRrScores] = useState({ me: 0, partner: 0 });
 
   useEffect(() => {
     document.body.classList.add('call-active');
     return () => { document.body.classList.remove('call-active'); };
   }, []);
+
+  // ── Reaction Roulette Engine ──
+  useEffect(() => {
+    if (!lastIncomingGameEvent) return;
+    const evt = lastIncomingGameEvent;
+    
+    if (evt.action === 'start' && evt.game === GAME_REACTION) {
+       setActiveGame(GAME_REACTION);
+       setIsGameHost(false);
+       setRrScores({ me: 0, partner: 0 });
+       setRrTarget(null);
+    } else if (evt.action === 'new_target') {
+       setRrTarget(evt.emoji);
+    } else if (evt.action === 'scored') {
+       setRrScores(prev => ({ ...prev, partner: prev.partner + 1 }));
+       setRrTarget(null); 
+    } else if (evt.action === 'end') {
+       setActiveGame(null);
+       setRrTarget(null);
+    }
+  }, [lastIncomingGameEvent]);
+
+  useEffect(() => {
+     let timer: any;
+     if (activeGame === GAME_REACTION && isGameHost && !rrTarget) {
+        timer = setTimeout(() => {
+           const emoji = REACTION_EMOJIS[Math.floor(Math.random() * REACTION_EMOJIS.length)];
+           setRrTarget(emoji);
+           onSendGameEvent({ action: 'new_target', emoji });
+        }, Math.random() * 2000 + 1000); 
+     }
+     return () => clearTimeout(timer);
+  }, [activeGame, isGameHost, rrTarget]);
+
+  const handleStartReactionGame = () => {
+     setActiveGame(GAME_REACTION);
+     setIsGameHost(true);
+     setRrScores({ me: 0, partner: 0 });
+     setRrTarget(null);
+     setShowGames(false);
+     onSendGameEvent({ action: 'start', game: GAME_REACTION });
+  };
+
+  const executeReact = (emoji: string) => {
+      onSendReaction(emoji);
+      
+      if (activeGame === GAME_REACTION && rrTarget === emoji) {
+         setRrTarget(null);
+         const currentMyScore = rrScores.me + 1;
+         setRrScores(prev => ({ ...prev, me: currentMyScore }));
+         onSendGameEvent({ action: 'scored' });
+         
+         if (currentMyScore >= 10) {
+            alert('You Won Reaction Roulette!');
+            setActiveGame(null);
+            onSendGameEvent({ action: 'end' });
+         }
+      }
+  };
 
   const statusText = incoming ? 'Incoming Secure Line...' : connected ? `Live Call • ${formatCallTime(callDuration)}` : 'Connecting...';
 
@@ -81,9 +153,28 @@ export function CallScreen({
       {/* Header Controls (Only when connected and in video) */}
       {connected && callType === 'video' && (
         <div className="call-screen__header">
-          <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><Camera size={20} /></button>
-          <button className="call-screen__icon-btn" onClick={() => setShowFilters(!showFilters)} aria-label="Filters"><Wand2 size={20} /></button>
+          <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
+          <div style={{ display: 'flex', gap: '15px' }}>
+             <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><Camera size={20} /></button>
+             <button className="call-screen__icon-btn" onClick={() => { setShowFilters(!showFilters); setShowGames(false); }} aria-label="Filters"><Wand2 size={20} /></button>
+          </div>
         </div>
+      )}
+      
+      {/* Game Selector Menu */}
+      {showGames && connected && callType === 'video' && (
+         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', justifyContent: 'center' }}>
+            <button 
+               onClick={handleStartReactionGame}
+               style={{
+                  padding: '12px 24px', background: 'rgba(239, 68, 68, 0.2)', 
+                  backdropFilter: 'blur(10px)', color: '#fca5a5', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)',
+                  fontWeight: '900', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px'
+               }}
+            >
+               Play: Reaction Roulette
+            </button>
+         </div>
       )}
       
       {/* Filter Selector Menu */}
@@ -165,10 +256,27 @@ export function CallScreen({
         <video ref={remoteVideoRef} autoPlay playsInline className="call-screen__video-remote" style={{ filter: remoteFilter !== 'none' ? remoteFilter : 'none' }} />
         <video ref={localVideoRef} autoPlay playsInline muted className="call-screen__video-local" style={{ filter: localFilter !== 'none' ? localFilter : 'none' }} />
         
+        {/* Game UI Layer */}
+        {activeGame === GAME_REACTION && (
+           <div style={{ position: 'absolute', top: '160px', left: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 11 }}>
+              <div style={{ background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>
+                 You: {rrScores.me}  —  Them: {rrScores.partner}
+              </div>
+              <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                 {rrTarget ? (
+                    <div style={{ fontSize: '80px', animation: 'floatUp 0.3s ease-out' }}>{rrTarget}</div>
+                 ) : (
+                    <div style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.2)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                 )}
+              </div>
+              {isGameHost && <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>End Game</button>}
+           </div>
+        )}
+
         {connected && callType === 'video' && (
           <div className="call-screen__reactions-bar">
-             {['❤️', '😍', '🔥', '💋', '✨'].map(emoji => (
-               <button key={emoji} className="call-screen__react-btn" onClick={() => onSendReaction(emoji)}>{emoji}</button>
+             {REACTION_EMOJIS.map(emoji => (
+               <button key={emoji} className="call-screen__react-btn" onClick={() => executeReact(emoji)}>{emoji}</button>
              ))}
              <button className="call-screen__icon-btn" style={{ marginLeft: 'auto', background: '#ef4444', borderColor: '#ef4444' }} onClick={onEndCall}>
                <PhoneOff size={20} />
