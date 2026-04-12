@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Activity } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2 } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -131,7 +131,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
   const [viewMedia, setViewMedia] = useState<{ url: string; type: 'photo' | 'video' } | null>(null);
   const [fullScreenMap, setFullScreenMap] = useState<{lat: number, lng: number} | null>(null);
-  const [showLocationMenu, setShowLocationMenu] = useState(false);
+  // showLocationMenu removed — location is now one-tap
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -368,8 +368,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         }
         
         if (payload.type === 'location:request') {
-           const doShare = confirm(`${partnerInfo.nick} requested your live location. Share for 1 hour?`);
-           if (doShare) handleLocationDrop(1);
+           const doShare = confirm(`${partnerInfo.nick} requested your live location. Share now?`);
+           if (doShare) sendLocation();
            return;
         }
 
@@ -555,40 +555,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     await sendSecurePayload(payload, msgId);
   };
 
-  // ── LOCATION DROP ──
-  const handleLocationDrop = (durationHrs: number) => {
-    setShowLocationMenu(false);
+  // ── SEND LOCATION (one-tap) ──
+  const sendLocation = () => {
     if (!navigator.geolocation) return alert('Location not supported by your browser');
-    
-    // Clear previous state and show loader with status
     setIsProcessingMedia(true);
-    
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 20000, // Increased timeout for better reliability
-      maximumAge: 0
-    };
-
-    console.log('📡 Starting Geolocation...');
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
         console.log('📍 Location Acquired:', lat, lng);
         
-        const expiresAt = Date.now() + (durationHrs * 60 * 60 * 1000);
         const payload: ChatPayload = { 
           type: 'location', 
           lat, 
           lng, 
-          text: `📍 Live Check-In (${Math.round(durationHrs * 60)}m)`, 
-          expiresAt 
+          text: `📍 My Live Location`
         };
         
         const msgId = Date.now().toString();
         const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
         
-        // Optimistic Update
         setMessages(prev => [...prev, msg]);
         scrollToBottom();
         
@@ -601,13 +587,13 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       (err) => {
         setIsProcessingMedia(false);
         console.error('❌ Geolocation Error:', err);
-        let msg = 'Failed to get location.';
-        if (err.code === 1) msg = 'Location access denied. Please allow location permissions in your browser settings.';
-        else if (err.code === 2) msg = 'Location signals are weak. Try moving near a window or outdoors.';
-        else if (err.code === 3) msg = 'Location request timed out. High-accuracy GPS failed.';
-        alert(msg);
+        let errMsg = 'Failed to get location.';
+        if (err.code === 1) errMsg = 'Location access denied. Please allow location permissions in your browser settings.';
+        else if (err.code === 2) errMsg = 'Location signals are weak. Try moving near a window or outdoors.';
+        else if (err.code === 3) errMsg = 'Location request timed out. Try again.';
+        alert(errMsg);
       },
-      options
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   };
 
@@ -966,38 +952,50 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            stopAudioAnalysis={stopAudioAnalysis} 
          />;
        }
-       if (payload.type === 'location' && payload.lat && payload.lng) {
-        const isExpired = payload.expiresAt && Date.now() > payload.expiresAt;
+       if (payload.type === 'location' && payload.lat != null && payload.lng != null) {
         return (
-          <div className="flex flex-col space-y-2 w-[220px]">
+          <div className="flex flex-col space-y-1.5 w-[240px]">
             <p className="text-[13px] font-bold text-white mb-0.5 tracking-tight flex items-center">
-               <MapPin size={14} className={isExpired ? "text-white/50 mr-1" : "text-primary mr-1"} /> 
-               {isExpired ? 'Location Expired' : 'Live Location'}
+               <MapPin size={14} className="text-primary mr-1.5 animate-pulse" /> 
+               📍 Live Location
             </p>
-            <div className={`rounded-[20px] overflow-hidden shadow-xl border border-white/10 h-40 w-full relative group ${isExpired ? 'opacity-50 grayscale pointer-events-none' : 'cursor-pointer'}`}
-                 onClick={() => !isExpired && setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
-               <iframe 
-                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=16&output=embed`}
-                 className="w-full h-full pointer-events-none"
-                 style={{ border: 0 }}
-                 scrolling="no"
+            <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/10 h-44 w-full relative group cursor-pointer"
+                 onClick={() => window.open(`https://www.google.com/maps/@${payload.lat},${payload.lng},18z/data=!3m1!1e3`, '_blank')}>
+               <img 
+                 src={`https://maps.googleapis.com/maps/api/staticmap?center=${payload.lat},${payload.lng}&zoom=17&size=480x360&maptype=satellite&markers=color:red%7C${payload.lat},${payload.lng}&key=`}
+                 alt="Location"
+                 className="w-full h-full object-cover"
+                 onError={(e) => {
+                   // Fallback: use OpenStreetMap tile if Google Static Maps fails (no API key)
+                   (e.target as HTMLImageElement).style.display = 'none';
+                   (e.target as HTMLImageElement).parentElement!.querySelector('.fallback-map')?.classList.remove('hidden');
+                 }}
                />
-               {!isExpired && (
-                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none">
-                    <div className="bg-primary text-white rounded-full p-2 shadow-2xl backdrop-blur-md group-hover:scale-110 transition-transform">
-                       <MapPin size={24} className="fill-current" />
-                    </div>
-                 </div>
-               )}
+               <iframe 
+                 className="fallback-map hidden w-full h-full absolute inset-0 pointer-events-none"
+                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=17&output=embed`}
+                 style={{ border: 0 }}
+                 loading="lazy"
+               />
+               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
+                  <div className="flex items-center justify-between w-full">
+                     <span className="text-[10px] text-white/80 font-bold uppercase tracking-widest">Satellite View</span>
+                     <div className="bg-primary text-white rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-lg">
+                        Open Maps →
+                     </div>
+                  </div>
+               </div>
+               <div className="absolute top-2 right-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-ping" />
+                  <div className="w-3 h-3 bg-green-500 rounded-full absolute inset-0" />
+               </div>
             </div>
-            {!isExpired && (
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                   <p className="text-[10px] text-white/50 text-center uppercase tracking-widest mt-1">Tap to explore</p>
-                   <button onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${payload.lat},${payload.lng}`, '_blank')} className="text-[10px] bg-white/10 text-white hover:bg-white/20 transition-colors rounded-full text-center uppercase tracking-widest mt-1 py-1 px-2 font-bold cursor-pointer">
-                      Directions
-                   </button>
-                </div>
-            )}
+            <button 
+              onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${payload.lat},${payload.lng}`, '_blank')} 
+              className="text-[10px] bg-white/10 text-white hover:bg-primary/80 transition-all rounded-xl text-center uppercase tracking-widest py-2 px-3 font-black cursor-pointer border border-white/5"
+            >
+               🧭 Get Directions
+            </button>
           </div>
         );
       }
@@ -1167,32 +1165,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                  </div>
                ) : (
                  <>
-                   <div className="relative flex-shrink-0">
-                      <button onClick={() => setShowLocationMenu(!showLocationMenu)} className={`p-2 transition-colors rounded-full active:scale-90 ${showLocationMenu ? 'text-primary' : 'text-white/40 hover:text-white'}`} title="Location">
-                         <MapPin size={22} />
-                      </button>
-                      <AnimatePresence>
-                         {showLocationMenu && (
-                            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 10 }} className="absolute bottom-16 left-0 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-2 z-50 transform origin-bottom-left flex flex-col space-y-1">
-                               <p className="text-[10px] text-white/30 uppercase tracking-widest font-black px-3 py-1">Live Location Time</p>
-                               <div className="grid grid-cols-2 gap-1 px-1">
-                                  <button onClick={() => handleLocationDrop(0.25)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">15m</button>
-                                  <button onClick={() => handleLocationDrop(0.5)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">30m</button>
-                                  <button onClick={() => handleLocationDrop(1)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">1h</button>
-                                  <button onClick={() => handleLocationDrop(8)} className="text-[10px] px-2 py-2 text-white bg-white/5 hover:bg-primary transition-colors rounded-xl font-bold uppercase tracking-widest">8h</button>
-                               </div>
-                               <div className="h-px bg-white/5 my-1 mx-2" />
-                               <button onClick={() => {
-                                  const mins = prompt('How many minutes would you like to share?');
-                                  if (mins && !isNaN(parseInt(mins))) handleLocationDrop(parseInt(mins) / 60);
-                               }} className="mx-1 py-2 text-white/60 hover:text-white text-[9px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 bg-white/5 rounded-xl transition-all hover:bg-white/10">
-                                  <Activity size={12} />
-                                  <span>Custom Minutes</span>
-                               </button>
-                            </motion.div>
-                         )}
-                      </AnimatePresence>
-                   </div>
+                    <button onClick={sendLocation} className="p-2 text-white/40 hover:text-primary transition-colors rounded-full active:scale-90 flex-shrink-0" title="Send Location">
+                       <MapPin size={22} />
+                    </button>
                    <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
                       <Camera size={22} />
                    </button>
