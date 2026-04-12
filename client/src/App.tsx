@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
@@ -232,113 +231,20 @@ const AppContent = () => {
     }
   }, [callState]);
   
-  // ── CALL OVERLAY RENDER ──
-  const renderCallOverlay = () => {
-    if (!callState.active) return null;
-
-    const partnerName = partner?.nick || 'Partner';
-    const avatarUrl = partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`;
-    const statusText = callState.incoming 
-      ? 'Incoming Secure Line...' 
-      : callState.connected 
-        ? `Live Call • ${formatTime(callDuration)}` 
-        : 'Connecting...';
-
-    return createPortal(
-      <div 
-        id="call-overlay-root"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: '100vw',
-          height: '100vh',
-          zIndex: 2147483647,
-          backgroundColor: '#050505',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '30px',
-          textAlign: 'center',
-          color: 'white',
-          fontFamily: 'sans-serif',
-          visibility: 'visible',
-          opacity: 1
-        }}
-      >
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, #8b5cf61a 0%, transparent 70%)', pointerEvents: 'none' }} />
-        
-        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '320px' }}>
-          {/* Avatar */}
-          <div style={{ width: '120px', height: '120px', borderRadius: '40px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', marginBottom: '24px', background: '#111' }}>
-            <img src={avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
-          </div>
-
-          <h1 style={{ fontSize: '36px', fontWeight: '900', margin: '0 0 10px 0', letterSpacing: '-1px' }}>{partnerName}</h1>
-          
-          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '100px', padding: '10px 25px', marginBottom: '60px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <span style={{ fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '4px', color: '#8b5cf6' }}>{statusText}</span>
-          </div>
-
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', gap: '50px', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-            {callState.incoming ? (
-              <>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <button 
-                    onClick={() => {
-                      if (sharedKey) encryptMessage(sharedKey, JSON.stringify({type:'call:end'})).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
-                      endCallUI();
-                    }}
-                    style={{ width: '85px', height: '85px', borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: '30px', cursor: 'pointer', boxShadow: '0 15px 40px rgba(239, 68, 68, 0.4)' }}
-                  >✕</button>
-                  <span style={{ marginTop: '15px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', opacity: 0.3, letterSpacing: '2px' }}>Reject</span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <button 
-                    onClick={() => {
-                      setCallState(s => ({ ...s, incoming: false, connected: true }));
-                      setupWebRTC(callState.type, false, callState.pendingSdp);
-                    }}
-                    style={{ width: '85px', height: '85px', borderRadius: '50%', background: '#22c55e', border: 'none', color: 'white', fontSize: '30px', cursor: 'pointer', boxShadow: '0 15px 40px rgba(34, 197, 94, 0.4)' }}
-                  >📞</button>
-                  <span style={{ marginTop: '15px', fontSize: '11px', fontWeight: '900', textTransform: 'uppercase', opacity: 0.3, letterSpacing: '2px' }}>Answer</span>
-                </div>
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <button 
-                  onClick={() => {
-                    if (sharedKey) encryptMessage(sharedKey, JSON.stringify({type:'call:end'})).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
-                    endCallUI();
-                  }}
-                  style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: '35px', cursor: 'pointer', boxShadow: '0 20px 50px rgba(239, 68, 68, 0.4)' }}
-                >📞</button>
-                <span style={{ marginTop: '15px', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase', opacity: 0.3, letterSpacing: '2px' }}>End Secure Line</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Video Feeds */}
-        {callState.type === 'video' && callState.connected && (
-          <div style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundColor: 'black' }}>
-            <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
-            <video 
-              ref={localVideoRef} 
-              autoPlay playsInline muted 
-              style={{ position: 'absolute', bottom: '40px', right: '30px', width: '130px', height: '190px', borderRadius: '30px', border: '2px solid rgba(255,255,255,0.2)', objectFit: 'cover', zIndex: 2 }} 
-            />
-          </div>
-        )}
-      </div>,
-      document.body
-    );
-  };
+  // ── Manage body background during calls to prevent stardust bleed-through ──
+  useEffect(() => {
+    if (callState.active) {
+      document.body.style.setProperty('background-image', 'none', 'important');
+      document.body.style.setProperty('background-color', '#000', 'important');
+    } else {
+      document.body.style.removeProperty('background-image');
+      document.body.style.removeProperty('background-color');
+    }
+    return () => {
+      document.body.style.removeProperty('background-image');
+      document.body.style.removeProperty('background-color');
+    };
+  }, [callState.active]);
 
   const endCallUI = () => {
     if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
@@ -479,47 +385,148 @@ const AppContent = () => {
     if (pin === appConfig.realPin) { setIsUnlocked(true); setIsFakeMode(false); } else if (appConfig.fakePin && pin === appConfig.fakePin) { setIsUnlocked(true); setIsFakeMode(true); }
   };
 
+  const callPartnerName = partner?.nick || 'Partner';
+  const callAvatarUrl = partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`;
+  const callStatusText = callState.incoming 
+    ? 'Incoming Secure Line...' 
+    : callState.connected 
+      ? `Live Call • ${formatTime(callDuration)}` 
+      : 'Connecting...';
+
+  // ── CALL IS ACTIVE: render ONLY the call screen, nothing else ──
+  if (callState.active) {
+    return (
+      <div
+        id="call-overlay-root"
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 999999,
+          backgroundColor: '#050505',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '30px',
+          textAlign: 'center' as const,
+          color: 'white',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          overflow: 'hidden',
+          isolation: 'isolate',
+        }}
+      >
+        {/* Subtle purple glow background */}
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, #8b5cf61a 0%, transparent 70%)', pointerEvents: 'none' }} />
+
+        {/* Call Content */}
+        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '320px' }}>
+          {/* Avatar */}
+          <div style={{ width: '120px', height: '120px', borderRadius: '40px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', marginBottom: '24px', background: '#111' }}>
+            <img src={callAvatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
+          </div>
+
+          <h1 style={{ fontSize: '36px', fontWeight: 900, margin: '0 0 10px 0', letterSpacing: '-1px', color: 'white' }}>{callPartnerName}</h1>
+
+          <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '100px', padding: '10px 25px', marginBottom: '60px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase' as const, letterSpacing: '4px', color: '#8b5cf6' }}>{callStatusText}</span>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '50px', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+            {callState.incoming ? (
+              <>
+                {/* DECLINE */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      if (sharedKey) encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+                      endCallUI();
+                    }}
+                    style={{ width: '85px', height: '85px', borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: '30px', cursor: 'pointer', boxShadow: '0 15px 40px rgba(239,68,68,0.4)', WebkitTapHighlightColor: 'transparent' }}
+                  >✕</button>
+                  <span style={{ marginTop: '15px', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' as const, opacity: 0.5, letterSpacing: '2px', color: '#ef4444' }}>Decline</span>
+                </div>
+
+                {/* ANSWER */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      setCallState(s => ({ ...s, incoming: false, connected: true }));
+                      setupWebRTC(callState.type, false, callState.pendingSdp);
+                    }}
+                    style={{ width: '85px', height: '85px', borderRadius: '50%', background: '#22c55e', border: 'none', color: 'white', fontSize: '30px', cursor: 'pointer', boxShadow: '0 15px 40px rgba(34,197,94,0.4)', WebkitTapHighlightColor: 'transparent' }}
+                  >📞</button>
+                  <span style={{ marginTop: '15px', fontSize: '11px', fontWeight: 900, textTransform: 'uppercase' as const, opacity: 0.5, letterSpacing: '2px', color: '#22c55e' }}>Answer</span>
+                </div>
+              </>
+            ) : (
+              /* END CALL (outgoing / connected) */
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <button
+                  onClick={() => {
+                    if (sharedKey) encryptMessage(sharedKey, JSON.stringify({ type: 'call:end' })).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
+                    endCallUI();
+                  }}
+                  style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#ef4444', border: 'none', color: 'white', fontSize: '35px', cursor: 'pointer', boxShadow: '0 20px 50px rgba(239,68,68,0.4)', WebkitTapHighlightColor: 'transparent' }}
+                >📞</button>
+                <span style={{ marginTop: '15px', fontSize: '12px', fontWeight: 900, textTransform: 'uppercase' as const, opacity: 0.3, letterSpacing: '2px' }}>End Secure Line</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Video Feeds */}
+        {callState.type === 'video' && callState.connected && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundColor: 'black' }}>
+            <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8 }} />
+            <video
+              ref={localVideoRef}
+              autoPlay playsInline muted
+              style={{ position: 'absolute', bottom: '40px', right: '30px', width: '130px', height: '190px', borderRadius: '30px', border: '2px solid rgba(255,255,255,0.2)', objectFit: 'cover', zIndex: 2 }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── NORMAL APP (no active call) ──
   return (
     <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative">
-      {/* ── CALL OVERLAY (TOP MOST) ── */}
-      {renderCallOverlay()}
-
-      {/* ── MAIN APP FLOW (HIDDEN DURING CALL) ── */}
-      {!callState.active && (
+      {isLoading ? (
+        <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
+           <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      ) : !appConfig ? (
+        <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
+      ) : !isUnlocked ? (
+        <div className="flex-1 relative">
+           <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
+        </div>
+      ) : !isPaired && !isFakeMode ? (
+        <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
+      ) : (
+        /* ── AUTHENTICATED APP CONTENT ── */
         <>
-          {isLoading ? (
-            <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
-               <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            </div>
-          ) : !appConfig ? (
-            <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
-          ) : !isUnlocked ? (
-            <div className="flex-1 relative">
-               <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
-            </div>
-          ) : !isPaired && !isFakeMode ? (
-            <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
-          ) : (
-            /* ── AUTHENTICATED APP CONTENT ── */
-            <>
-              <div className="flex-1 relative overflow-hidden">
-                <AnimatePresence mode="wait">
-                  <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
-                    {isFakeMode ? <FakeCalculator /> : (
-                      <Routes location={location}>
-                        <Route path="/"       element={<DashboardScreen />} />
-                        <Route path="/chat"   element={<ChatScreen />} />
-                        <Route path="/vault"  element={<VaultScreen />} />
-                        <Route path="/panic"  element={<PanicScreen />} />
-                        <Route path="/settings" element={<SettingsScreen />} />
-                      </Routes>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-              {!isFakeMode && <BottomNav />}
-            </>
-          )}
+          <div className="flex-1 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
+                {isFakeMode ? <FakeCalculator /> : (
+                  <Routes location={location}>
+                    <Route path="/"       element={<DashboardScreen />} />
+                    <Route path="/chat"   element={<ChatScreen />} />
+                    <Route path="/vault"  element={<VaultScreen />} />
+                    <Route path="/panic"  element={<PanicScreen />} />
+                    <Route path="/settings" element={<SettingsScreen />} />
+                  </Routes>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {!isFakeMode && <BottomNav />}
         </>
       )}
     </div>
