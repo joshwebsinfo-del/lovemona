@@ -782,11 +782,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
   const startVideoNote = async () => {
     try {
-      // Stripping explicit height/width constraints forcing mobile hardware defaults
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: { echoCancellation: true, noiseSuppression: true } });
+      // Apply safe ideal bounds to prevent iOS from recording 4K footage and crashing WebCrypto memory limits
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'user', width: { max: 720 }, height: { max: 720 } }, 
+          audio: { echoCancellation: true, noiseSuppression: true } 
+      });
       
       // Let the browser choose the native OS codec (fixes Safari 'video/webm' crash)
-      const mr = new MediaRecorder(stream);
+      // Provide a 2.5 Mbps bitrate constraint for safety
+      const mr = new MediaRecorder(stream, { videoBitsPerSecond: 2500000 });
       mediaRecorderRef.current = mr;
       audioChunksRef.current = [];
       
@@ -813,7 +817,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encrypted);
                if (storageErr) throw storageErr;
                
-               payload = { type: 'media', text: 'Video Note', mediaType: 'video/webm', storagePath, storageIv: ivB64 };
+               payload = { type: 'media', text: 'Video Note', mediaType: mimeType, storagePath, storageIv: ivB64 };
                
                const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
                setMessages(prev => [...prev, msg]);
@@ -822,7 +826,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                await sendSecurePayload(payload, msgId);
             }
          } catch(e) {
-            alert('Failed to send Video Note.');
+            console.error('VideoNote Error:', e);
+            alert('Failed to send Video Note. The file might be too large or the connection dropped.');
          } finally {
             setIsProcessingMedia(false);
          }
