@@ -131,7 +131,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [isProcessingMedia, setIsProcessingMedia] = useState(false);
   const [viewMedia, setViewMedia] = useState<{ url: string; type: 'photo' | 'video' } | null>(null);
   const [fullScreenMap, setFullScreenMap] = useState<{lat: number, lng: number} | null>(null);
-  // showLocationMenu removed — location is now one-tap
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
@@ -317,11 +316,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     setup();
   }, [partnerNickname]);
 
-  const scrollToBottom = () => {
-    setTimeout(() => {
+  const scrollToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }, 100);
-  };
+    });
+  }, []);
 
   // Keep partnerIdRef in sync so closures always have the latest value
   useEffect(() => { partnerIdRef.current = partnerInfo.userId; }, [partnerInfo.userId]);
@@ -960,20 +959,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                📍 Live Location
             </p>
             <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/10 h-44 w-full relative group cursor-pointer"
-                 onClick={() => window.open(`https://www.google.com/maps/@${payload.lat},${payload.lng},18z/data=!3m1!1e3`, '_blank')}>
-               <img 
-                 src={`https://maps.googleapis.com/maps/api/staticmap?center=${payload.lat},${payload.lng}&zoom=17&size=480x360&maptype=satellite&markers=color:red%7C${payload.lat},${payload.lng}&key=`}
-                 alt="Location"
-                 className="w-full h-full object-cover"
-                 onError={(e) => {
-                   // Fallback: use OpenStreetMap tile if Google Static Maps fails (no API key)
-                   (e.target as HTMLImageElement).style.display = 'none';
-                   (e.target as HTMLImageElement).parentElement!.querySelector('.fallback-map')?.classList.remove('hidden');
-                 }}
-               />
+                 onClick={() => setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
                <iframe 
-                 className="fallback-map hidden w-full h-full absolute inset-0 pointer-events-none"
                  src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=17&output=embed`}
+                 className="w-full h-full pointer-events-none"
                  style={{ border: 0 }}
                  loading="lazy"
                />
@@ -981,7 +970,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   <div className="flex items-center justify-between w-full">
                      <span className="text-[10px] text-white/80 font-bold uppercase tracking-widest">Satellite View</span>
                      <div className="bg-primary text-white rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-lg">
-                        Open Maps →
+                        Tap to Expand
                      </div>
                   </div>
                </div>
@@ -990,12 +979,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   <div className="w-3 h-3 bg-green-500 rounded-full absolute inset-0" />
                </div>
             </div>
-            <button 
-              onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${payload.lat},${payload.lng}`, '_blank')} 
-              className="text-[10px] bg-white/10 text-white hover:bg-primary/80 transition-all rounded-xl text-center uppercase tracking-widest py-2 px-3 font-black cursor-pointer border border-white/5"
-            >
-               🧭 Get Directions
-            </button>
           </div>
         );
       }
@@ -1085,7 +1068,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       {/* ── MESSAGE LIST ── */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar scroll-smooth"
+        className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar"
       >
         {messages.map((msg, i) => {
           const isMe = msg.senderId === myUserId;
@@ -1094,9 +1077,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           return (
                <motion.div
                 key={msg.id}
-                initial={{ opacity: 0, y: 15, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.12 }}
                 className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full`}
               >
                 <div
@@ -1275,16 +1258,25 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         )}
       </AnimatePresence>
 
-      {/* ── Map Lightbox ── */}
+      {/* ── Map Lightbox (In-App Satellite View) ── */}
       <AnimatePresence>
         {fullScreenMap && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black backdrop-blur-xl flex flex-col">
-            <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-10 bg-gradient-to-b from-black/80 to-transparent">
-               <div className="flex items-center text-white font-bold">
-                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center mr-3"><MapPin size={16} className="text-primary" /></div>
-                 <span>Live Location</span>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black flex flex-col">
+            <div className="absolute top-0 left-0 right-0 p-5 flex justify-between items-center z-10 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
+               <div className="flex items-center space-x-3">
+                 <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
+                   <MapPin size={18} className="text-primary" />
+                 </div>
+                 <div>
+                   <p className="text-white font-bold text-sm tracking-wide">Live Location</p>
+                   <p className="text-white/40 text-[10px] uppercase tracking-widest font-black">Satellite View</p>
+                 </div>
+                 <div className="ml-2 flex items-center space-x-1">
+                   <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                   <span className="text-green-400 text-[9px] uppercase font-black tracking-widest">Live</span>
+                 </div>
                </div>
-               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white/80 active:scale-95"><X size={20} /></button>
+               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white active:scale-95"><X size={20} /></button>
             </div>
             <div className="flex-1 w-full relative">
                <iframe 
@@ -1293,6 +1285,14 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                  style={{ border: 0 }}
                  allowFullScreen
                />
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent flex justify-center z-10">
+               <button 
+                 onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${fullScreenMap.lat},${fullScreenMap.lng}`, '_blank')} 
+                 className="bg-primary text-white rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-widest shadow-2xl active:scale-95 transition-transform"
+               >
+                  🧭 Get Directions
+               </button>
             </div>
           </motion.div>
         )}
