@@ -810,10 +810,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                
                payload = { type: 'media', text: 'Video Note', mediaType: 'video/webm', storagePath, storageIv: ivB64 };
                
-               const reader = new FileReader();
-               reader.readAsDataURL(file);
-               await new Promise(r => { reader.onload = r; });
-               const b64 = reader.result as string;
                const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
                setMessages(prev => [...prev, msg]);
                scrollToBottom();
