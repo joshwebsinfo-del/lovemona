@@ -362,55 +362,89 @@ const AppContent = () => {
     <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans">
       
       {/* ── GLOBAL CALL OVERLAY (Highest Z-Index) ── */}
-      <AnimatePresence>
-        {callState.active && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 1.1 }} 
-            animate={{ opacity: 1, scale: 1 }} 
-            exit={{ opacity: 0, scale: 1.1 }} 
-            className="fixed inset-0 bg-zinc-950 z-[9999] flex flex-col items-center justify-center p-6 text-white text-center"
-          >
-             {/* Background Pulse */}
-             <div className="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none" />
-             <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black pointer-events-none" />
+      {/* ── GLOBAL CALL OVERLAY (Bulletproof Render) ── */}
+      {callState.active && (
+        <div 
+          className="fixed inset-0 bg-[#050505] z-[99999] flex flex-col items-center justify-center p-6 text-white"
+        >
+           {/* Visual Flourish */}
+           <div className="absolute inset-0 bg-primary/20 opacity-20 animate-pulse" />
+           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/50 to-black" />
 
-             <div className="relative flex flex-col items-center w-full max-w-sm z-10">
-                <div className="w-24 h-24 rounded-[40px] overflow-hidden mb-6 ring-4 ring-white/10 p-1 bg-zinc-900 shadow-2xl">
-                   <img src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId}`} className="w-full h-full rounded-[36px] object-cover" />
-                </div>
-                <h2 className="text-3xl font-black mb-2 uppercase tracking-tighter">{partner?.nick || 'Partner'}</h2>
-                <div className="flex items-center space-x-2 mb-8 bg-white/5 px-4 py-1.5 rounded-full border border-white/5">
-                   <div className="w-2 h-2 bg-primary rounded-full animate-ping" />
-                   <p className="text-primary font-black uppercase tracking-[3px] text-[10px]">
-                      {callState.incoming ? 'Secure Request' : callState.connected ? `Live Connection • ${formatTime(callDuration)}` : 'Initiating...'}
-                   </p>
-                </div>
+           <div className="relative z-[100] flex flex-col items-center w-full max-w-sm">
+              {/* Partner Info */}
+              <div className="mb-8 flex flex-col items-center">
+                 <div className="w-28 h-28 rounded-[44px] bg-zinc-900 p-1.5 shadow-2xl mb-6 ring-2 ring-white/10 ring-offset-4 ring-offset-black">
+                    <img 
+                      src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`} 
+                      className="w-full h-full rounded-[38px] object-cover" 
+                      alt="Partner"
+                      onError={(e) => (e.currentTarget.src = 'https://api.dicebear.com/7.x/avataaars/svg?seed=fallback')}
+                    />
+                 </div>
+                 <h2 className="text-4xl font-black uppercase tracking-tighter mb-2">{partner?.nick || 'Partner'}</h2>
+                 <div className="flex items-center space-x-2 bg-white/5 border border-white/10 px-4 py-1.5 rounded-full">
+                    <div className={`w-2 h-2 rounded-full ${callState.connected ? 'bg-green-500 animate-pulse' : 'bg-primary animate-ping'}`} />
+                    <span className="text-[10px] uppercase font-black tracking-[4px] text-white/60">
+                       {callState.incoming ? 'Incoming Call' : callState.connected ? `Live • ${formatTime(callDuration)}` : 'Calling...'}
+                    </span>
+                 </div>
+              </div>
 
-                {callState.type === 'video' && callState.connected && (
-                   <div className="w-full aspect-[3/4] rounded-[40px] bg-black border border-white/5 overflow-hidden relative mb-10 shadow-2xl">
-                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                      <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-6 right-6 w-32 h-44 bg-zinc-900 rounded-3xl border border-white/10 object-cover shadow-2xl" />
-                      <div className="absolute top-6 left-6 flex items-center space-x-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
-                         <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-                         <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Rec Active</span>
-                      </div>
-                   </div>
-                )}
+              {/* Video Area */}
+              {callState.type === 'video' && callState.connected && (
+                 <div className="w-full aspect-[3/4] bg-black rounded-[48px] border border-white/10 overflow-hidden relative mb-12 shadow-2xl group">
+                    <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-6 right-6 w-36 h-48 bg-zinc-900 rounded-[32px] border-2 border-white/20 object-cover shadow-2xl" />
+                    <div className="absolute top-6 left-6 flex items-center space-x-2 bg-black/60 backdrop-blur-xl px-4 py-2 rounded-full border border-white/10">
+                       <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                       <span className="text-[10px] font-black uppercase tracking-widest text-red-500">Live Encrypted</span>
+                    </div>
+                 </div>
+              )}
 
-                <div className="flex items-center space-x-12">
-                   {callState.incoming ? (
-                      <>
-                        <button onClick={rejectCall} className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-transform"><X size={32} /></button>
-                        <button onClick={acceptCall} className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 animate-bounce transition-transform"><Phone size={32} /></button>
-                      </>
-                   ) : (
-                      <button onClick={rejectCall} className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform"><Phone size={32} className="rotate-[135deg]" /></button>
-                   )}
-                </div>
-             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              {/* ACTION BUTTONS (ALWAYS VISIBLE) */}
+              <div className="flex items-center space-x-12 mt-4 relative z-[200]">
+                 {callState.incoming ? (
+                    <>
+                       {/* Decline */}
+                       <div className="flex flex-col items-center space-y-3">
+                          <button 
+                            onClick={rejectCall} 
+                            className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-xl hover:bg-red-500 active:scale-95 transition-all text-white border-4 border-red-500/20"
+                          >
+                             <X size={36} strokeWidth={3} />
+                          </button>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Decline</span>
+                       </div>
+
+                       {/* Accept */}
+                       <div className="flex flex-col items-center space-y-3">
+                          <button 
+                            onClick={acceptCall} 
+                            className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center shadow-xl hover:bg-green-500 active:scale-95 transition-all text-white border-4 border-green-500/20 animate-bounce"
+                          >
+                             <Phone size={36} strokeWidth={3} />
+                          </button>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Answer</span>
+                       </div>
+                    </>
+                 ) : (
+                    /* End Call / Cancel */
+                    <div className="flex flex-col items-center space-y-3">
+                       <button 
+                         onClick={rejectCall} 
+                         className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-xl hover:bg-red-500 active:scale-95 transition-all text-white border-4 border-red-500/20"
+                       >
+                          <Phone size={36} strokeWidth={3} className="rotate-[135deg]" />
+                       </button>
+                       <span className="text-[10px] font-black uppercase tracking-widest text-white/40">End Connection</span>
+                    </div>
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
 
       {/* ── ACCESS CONTROL FLOW ── */}
       {isLoading ? (
