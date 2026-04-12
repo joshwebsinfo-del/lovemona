@@ -60,12 +60,17 @@ export const VaultScreen: React.FC = () => {
 
   useEffect(() => {
     loadVault();
-    // Listen for Realtime Secret Drops and Uploads from partner
+    
+    console.log("Vault: Subscribing to Cloud Sync...");
     const channel = supabase.channel('vault_sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault' }, () => {
-        loadVault();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'vault' }, (payload) => {
+          console.log("Vault: Cloud Sync Triggered!", payload);
+          loadVault(); 
       })
-      .subscribe();
+      .subscribe((status) => {
+         console.log("Vault: Subscription Status:", status);
+      });
+      
     return () => { supabase.removeChannel(channel); };
   }, []);
 
@@ -342,14 +347,26 @@ export const VaultScreen: React.FC = () => {
             )}
          </AnimatePresence>
         
-        {!activeCategory && items.length > 0 && (
-           <button 
-             onClick={clearAllVault}
-             className="mt-4 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] items-center space-x-1 uppercase tracking-widest py-1.5 px-4 rounded-full font-black active:scale-95 transition-transform"
-           >
-              <span>Nuclear Clear</span>
-           </button>
-        )}
+        <div className="flex space-x-2 mt-4">
+           {items.length > 0 && !activeCategory && (
+              <button 
+                onClick={clearAllVault}
+                className="bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] items-center space-x-1 uppercase tracking-widest py-1.5 px-3 rounded-full font-black active:scale-95 transition-transform"
+              >
+                 <span>Nuclear Clear</span>
+              </button>
+           )}
+           
+           {!activeCategory && (
+              <button 
+                onClick={loadVault}
+                disabled={isSyncing}
+                className="bg-white/5 border border-white/10 text-white/40 text-[10px] items-center space-x-1 uppercase tracking-widest py-1.5 px-3 rounded-full font-black active:scale-95 transition-transform"
+              >
+                 <span>{isSyncing ? 'Syncing...' : 'Sync Cloud'}</span>
+              </button>
+           )}
+        </div>
 
         {activeCategory && (
            <button onClick={() => setActiveCategory(null)} className="absolute top-20 right-8 text-white/20 hover:text-white transition-colors">
