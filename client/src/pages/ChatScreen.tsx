@@ -158,26 +158,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const audioChunksRef = useRef<Blob[]>([]);
   const activeVoiceEffectRef = useRef<string | null>(null);
 
-  // Video Call Enhancements
-  const callRecorderRef = useRef<MediaRecorder | null>(null);
-  const callChunksRef = useRef<Blob[]>([]);
-  const [videoFilter, setVideoFilter] = useState<{id:string, label:string, css:string}>({id:'none', label:'Normal', css:'none'});
-
-  const VIDEO_FILTERS = [
-    { id: 'none', label: 'Normal', css: 'none' },
-    { id: 'romantic', label: 'Romantic', css: 'saturate(1.2) contrast(1.1) brightness(1.1) hue-rotate(-10deg) sepia(0.2)' },
-    { id: 'vintage', label: 'Vintage', css: 'sepia(0.6) contrast(1.2) brightness(0.9)' },
-    { id: 'bw', label: 'Noir', css: 'grayscale(1) contrast(1.3)' }
-  ];
-
-  // WebRTC Refs
-  const [callState, setCallState] = useState<{ active: boolean; type: 'video' | 'voice'; incoming: boolean; connected: boolean; pendingSdp?: RTCSessionDescriptionInit; }>({ active: false, type: 'video', incoming: false, connected: false });
-  const pcRef = useRef<RTCPeerConnection | null>(null);
-  const iceCandidateQueue = useRef<RTCIceCandidateInit[]>([]);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-
   // Soundscape States
   const [audioLevel, setAudioLevel] = useState(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -455,31 +435,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           
           scrollToBottom();
         } 
-        else if (payload.type === 'call:offer') {
-          setCallState({ active: true, incoming: true, type: payload.callType || 'video', connected: false, pendingSdp: payload.sdp });
-        }
-        else if (payload.type === 'call:answer' && payload.sdp) {
-          await pcRef.current?.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-          setCallState(s => ({ ...s, connected: true }));
-          
-          // Process any queued ice candidates on the caller side once answer is received
-          while (iceCandidateQueue.current.length > 0) {
-            const cand = iceCandidateQueue.current.shift();
-            if (cand && pcRef.current) await pcRef.current.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-          }
-        }
-        else if (payload.type === 'call:ice') {
-          if (payload.candidate) {
-            if (pcRef.current?.remoteDescription) {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
-            } else {
-              iceCandidateQueue.current.push(payload.candidate);
-            }
-          }
-        }
-        else if (payload.type === 'call:end') {
-          endCallUI();
-        }
+        // Calling is now handled by the Global Calling Manager in App.tsx
       } catch (e) {
         console.warn('Decryption failed for incoming message', e);
       }
@@ -833,127 +789,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     setShowMenu(false);
   };
 
-  // ── CALL LOGIC ──
-  const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: type === 'video' ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-      });
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
-      const pc = new RTCPeerConnection({ 
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          { urls: 'stun:stun.services.mozilla.com' },
-          { urls: 'stun:stun.l.google.com:19305' },
-          { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-          { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-          { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
-        ],
-        iceTransportPolicy: 'all',
-        iceCandidatePoolSize: 10
-      });
-      pcRef.current = pc;
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-      pc.ontrack = (event) => { 
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0]; 
-
-          // Mix Remote Stream + Local Audio to record full conversation memory
-          if (type === 'video' && !callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
-              try {
-                 const remoteStream = event.streams[0];
-                 const mixedStream = new MediaStream([
-                     ...remoteStream.getVideoTracks(),
-                     ...remoteStream.getAudioTracks(),
-                     ...stream.getAudioTracks()
-                 ]);
-                 
-                 callChunksRef.current = [];
-                 const mr = new MediaRecorder(mixedStream, { mimeType: 'video/webm' });
-                 mr.ondataavailable = e => { if (e.data.size > 0) callChunksRef.current.push(e.data); };
-                 mr.onstop = async () => {
-                     if (callChunksRef.current.length === 0) return;
-                     const blob = new Blob(callChunksRef.current, { type: 'video/webm' });
-                     callChunksRef.current = [];
-                     const reader = new FileReader();
-                     reader.onload = async () => {
-                         const b64 = reader.result as string;
-                         const msgId = 'call_' + Date.now();
-                         const db = await initDB();
-                         
-                         const msg: Message = { id: msgId, senderId: myUserId || '', text: JSON.stringify({ type: 'text', text: '📽️ Video Call Memory Saved Automatically to Vault' }), timestamp: Date.now(), status: 'sent' };
-                         await db.put('messages', msg);
-                         setMessages(prev => [...prev, msg]);
-                         
-                         // Save to Vault Locally
-                         await db.put('vault', {
-                             id: msgId, name: 'Video Call Memory', type: 'video', data: b64, timestamp: Date.now(), locked: true
-                         });
-                         
-                         // Save to Cloud Securely
-                         if (sharedKey && myUserId) {
-                             try {
-                                const enc = await encryptMessage(sharedKey, b64);
-                                await supabase.from('vault').insert([{
-                                    id: msgId, owner_id: myUserId, name: 'Video Call Memory', type: 'video', encrypted_data: enc.encrypted, iv: enc.iv, timestamp: Date.now()
-                                }]);
-                             } catch(e) { console.error('Failed call vault save', e); }
-                         }
-                     };
-                     reader.readAsDataURL(blob);
-                 };
-                 mr.start(1000);
-                 callRecorderRef.current = mr;
-              } catch(e) { console.warn('Could not auto-record call', e); }
-          }
-      };
-      
-      pc.onicecandidate = (event) => {
-        if (event.candidate) sendSecurePayload({ type: 'call:ice', candidate: event.candidate });
-      };
-
-      if (isInitiator) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        sendSecurePayload({ type: 'call:offer', callType: type, sdp: pc.localDescription || undefined });
-      } else if (remoteSdp) {
-        await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        sendSecurePayload({ type: 'call:answer', sdp: pc.localDescription || undefined });
-        
-        // Drain ice candidates that arrived early
-        while (iceCandidateQueue.current.length > 0) {
-          const cand = iceCandidateQueue.current.shift();
-          if (cand) await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-        }
-      }
-    } catch {
-      alert('Could not set up call.');
-      endCallUI();
-    }
+  const startCall = (type: 'video' | 'voice') => { 
+    window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type } }));
   };
-
-  const startCall = (type: 'video' | 'voice') => { setCallState({ active: true, type, incoming: false, connected: false }); setupWebRTC(type, true); };
-  const acceptCall = () => { setCallState(s => ({ ...s, incoming: false, connected: true })); setupWebRTC(callState.type, false, callState.pendingSdp); };
-  const rejectCall = () => { sendSecurePayload({ type: 'call:end' }); endCallUI(); };
-  const endCallUI = useCallback(() => {
-    if (callRecorderRef.current && callRecorderRef.current.state !== 'inactive') {
-        callRecorderRef.current.stop();
-        callRecorderRef.current = null;
-    }
-    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-    if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; }
-    setCallState({ active: false, type: 'video', incoming: false, connected: false });
-  }, []);
-  const handleEndCallAction = () => { sendSecurePayload({ type: 'call:end' }); endCallUI(); };
 
   // Generate pretty duration string
   const formatTime = (secs: number) => {
@@ -1073,9 +911,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                             { name: 'Rose', type: 'rose' }
                           ].map(w => (
                              <button 
-                               key={w.name} 
-                               onClick={() => { setWallpaper(w.type); setShowMenu(false); }}
-                               className={`px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all ${wallpaper === w.type ? 'bg-primary text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
+                                key={w.name} 
+                                onClick={() => { setWallpaper(w.type); setShowMenu(false); }}
+                                className={`px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all ${wallpaper === w.type ? 'bg-primary text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
                              >
                                 {w.name}
                              </button>
@@ -1222,52 +1060,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           </div>
         </div>
       </div>
-
-      {/* ── Call Overlay ── */}
-      <AnimatePresence>
-        {callState.active && (
-          <motion.div initial={{ opacity: 0, y: '100%' }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: '100%' }} className="fixed inset-0 bg-zinc-950 z-50 flex flex-col items-center">
-            <div className="absolute inset-0 bg-primary/10 animate-pulse mix-blend-screen" />
-            <div className="relative w-full h-full flex flex-col items-center pt-24 pb-12">
-              <div className="w-32 h-32 rounded-full overflow-hidden mb-6 relative shadow-2xl shadow-primary/20 ring-4 ring-white/10">
-                 <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt="Partner" className="w-full h-full object-cover" />
-              </div>
-              <h2 className="text-3xl font-bold text-white mb-2">{partnerInfo.nick}</h2>
-              <p className="text-white/50 text-sm font-medium tracking-widest uppercase">
-                {callState.incoming ? 'Incoming Call...' : callState.connected ? 'Secure Connection' : 'Ringing...'}
-              </p>
-              <div className={`mt-8 relative w-11/12 max-w-sm aspect-[3/4] rounded-[32px] overflow-hidden bg-black/50 border border-white/10 shadow-2xl ${callState.type === 'video' ? 'block' : 'hidden'}`}>
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover transition-all duration-500" style={{ filter: videoFilter.css }} />
-                <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-28 h-40 bg-black/80 rounded-2xl border-2 border-white/20 object-cover shadow-xl backdrop-blur-md transition-all duration-500" style={{ filter: videoFilter.css }} />
-                
-                {callState.type === 'video' && callState.connected && (
-                   <div className="absolute top-4 right-4 flex flex-col space-y-2 z-50">
-                      {VIDEO_FILTERS.map(f => (
-                         <button 
-                            key={f.id} 
-                            onClick={() => setVideoFilter(f)}
-                            className={`px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase transition-all backdrop-blur-md ${videoFilter.id === f.id ? 'bg-primary text-white shadow-lg shadow-primary/30 border border-primary' : 'bg-black/50 text-white/50 border border-white/10 hover:bg-white/10'}`}
-                         >
-                            {f.label}
-                         </button>
-                      ))}
-                   </div>
-                )}
-              </div>
-              <div className="mt-auto flex items-center space-x-8">
-                {callState.incoming ? (
-                  <>
-                    <button onClick={rejectCall} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg active:scale-95"><X size={30} className="text-white" /></button>
-                    <button onClick={acceptCall} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg active:scale-95 animate-bounce"><Phone size={30} className="text-white fill-white" /></button>
-                  </>
-                ) : (
-                  <button onClick={handleEndCallAction} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg active:scale-95"><Phone size={30} className="text-white rotate-[135deg] fill-white" /></button>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Lightbox Overlay ── */}
       <AnimatePresence>

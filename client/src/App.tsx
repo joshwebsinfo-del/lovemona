@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+
+import { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
+import { MessageCircle, Home, Lock, Settings, X, Phone } from 'lucide-react';
 import { DashboardScreen } from './pages/DashboardScreen';
 import { ChatScreen } from './pages/ChatScreen';
 import { VaultScreen } from './pages/VaultScreen';
@@ -11,7 +12,9 @@ import { SetupScreen } from './pages/SetupScreen';
 import { PinSetupScreen } from './pages/PinSetupScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
 import { initDB } from './lib/db';
-import type { AuthConfig } from './lib/types';
+import type { AuthConfig, Partner } from './lib/types';
+import { initSocket, getSocket } from './lib/socket';
+import { decryptMessage, encryptMessage, deriveSharedSecret, importPublicKey } from './lib/crypto';
 
 // ──────────────────────────────────────────────
 // Bottom navigation
@@ -27,15 +30,12 @@ const BottomNav = () => {
     { id: 'settings', label: 'Setup', icon: Settings, path: '/settings' },
   ];
 
-  // Don't show nav on these paths or in fake mode
   const hidePaths = ['/chat', '/panic', '/lock', '/setup', '/pin-setup'];
   if (hidePaths.includes(location.pathname)) return null;
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm">
       <div className="bg-[#121214]/80 backdrop-blur-3xl border border-white/5 rounded-[40px] h-[72px] px-2 flex items-center justify-between shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
-        
-        {/* SLIDING INDICATOR */}
         <AnimatePresence>
           {navItems.map((item, i) => {
             const active = location.pathname === item.path;
@@ -64,21 +64,10 @@ const BottomNav = () => {
               onClick={() => navigate(path)}
               className="flex-1 relative z-10 flex flex-col items-center justify-center space-y-1 group"
             >
-              <motion.div
-                animate={{ 
-                  scale: active ? [1, 1.2, 1.1] : 1,
-                  y: active ? -2 : 0
-                }}
-              >
-                <Icon 
-                  size={20} 
-                  strokeWidth={active ? 2.5 : 1.5} 
-                  className={`transition-colors duration-300 ${active ? 'text-primary' : 'text-white/30 group-hover:text-white/60'}`} 
-                />
+              <motion.div animate={{ scale: active ? [1, 1.2, 1.1] : 1, y: active ? -2 : 0 }}>
+                <Icon size={20} strokeWidth={active ? 2.5 : 1.5} className={`transition-colors duration-300 ${active ? 'text-primary' : 'text-white/30 group-hover:text-white/60'}`} />
               </motion.div>
-              <span className={`text-[9px] font-black uppercase tracking-[1px] transition-colors duration-300 ${active ? 'text-white' : 'text-white/30'}`}>
-                {label}
-              </span>
+              <span className={`text-[9px] font-black uppercase tracking-[1px] transition-colors duration-300 ${active ? 'text-white' : 'text-white/30'}`}>{label}</span>
             </button>
           );
         })}
@@ -88,143 +77,205 @@ const BottomNav = () => {
 };
 
 // ──────────────────────────────────────────────
-// Fake Calculator (shown on decoy PIN)
-// ──────────────────────────────────────────────
 const FakeCalculator = () => (
   <div className="flex flex-col items-center justify-center h-full p-10 text-center select-none">
     <h2 className="text-2xl font-bold text-white/20">Calculator</h2>
     <p className="text-white/10 mt-1 text-sm italic mb-6">Basic calculator mode</p>
     <div className="grid grid-cols-4 gap-2 w-full max-w-xs opacity-20 grayscale">
       {[7,8,9,'÷',4,5,6,'×',1,2,3,'−','.',0,'=','+'].map((btn, i) => (
-        <div key={i} className="h-14 border border-white/20 flex items-center justify-center rounded-xl text-white text-lg">
-          {btn}
-        </div>
+        <div key={i} className="h-14 border border-white/20 flex items-center justify-center rounded-xl text-white text-lg">{btn}</div>
       ))}
     </div>
   </div>
 );
 
 // ──────────────────────────────────────────────
-// Main app content
-// ──────────────────────────────────────────────
 const AppContent = () => {
   const [appConfig, setAppConfig] = useState<AuthConfig | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(true);
+  const [isFakeMode, setIsFakeMode] = useState(false);
+  const [isPaired, setIsPaired] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [partner, setPartner] = useState<Partner | null>(null);
+  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  
+  const [callState, setCallState] = useState<{ active: boolean; type: 'video' | 'voice'; incoming: boolean; connected: boolean; pendingSdp?: any }>({ active: false, type: 'video', incoming: false, connected: false });
+  const [callDuration, setCallDuration] = useState(0);
 
-  const [isUnlocked, setIsUnlocked]   = useState(true);
-  const [isFakeMode, setIsFakeMode]   = useState(false);
-  const [isPaired,   setIsPaired]     = useState(false);
-  const [isLoading,  setIsLoading]    = useState(true);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const iceCandidateQueue = useRef<any[]>([]);
+  const ringtoneSound = useRef<HTMLAudioElement | null>(null);
+  const callDurationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wakeLockRef = useRef<any>(null);
 
   const location = useLocation();
 
-  // Load config and pairing status from IndexedDB on mount
+  useEffect(() => {
+    ringtoneSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3');
+    ringtoneSound.current.loop = true;
+    ringtoneSound.current.volume = 0.6;
+  }, []);
+
   useEffect(() => {
     const load = async () => {
       try {
         const db = await initDB();
-        const [config, partner] = await Promise.all([
+        const [config, p, identity] = await Promise.all([
           db.get('auth', 'pins'),
           db.get('partner', 'partner'),
+          db.get('identity', 'me')
         ]);
 
-        if (config) {
-          setAppConfig(config);
+        if (config) setAppConfig(config);
+        if (p) {
+          setPartner(p);
+          setIsPaired(true);
+          if (identity) {
+             const importedPartnerKey = await importPublicKey(p.publicKeyPem);
+             const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
+             setSharedKey(key);
+             initSocket(identity.userId);
+          }
         }
-        if (partner) setIsPaired(true);
-      } catch (err) {
-        console.error('Failed to load app config:', err);
-      } finally {
-        setIsLoading(false);
-      }
+      } catch (err) { console.error('Failed to load app config:', err); } finally { setIsLoading(false); }
     };
     load();
 
-    // Inactivity Auto-Lock (Privacy Improvement #1)
-    let lockTimeout: ReturnType<typeof setTimeout>;
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // Lock after 1 minute of being hidden
-        lockTimeout = setTimeout(() => {
-          setIsUnlocked(false);
-          setIsFakeMode(false);
-        }, 60000); 
-      } else {
-        clearTimeout(lockTimeout);
+      if (document.visibilityState === 'visible') {
+         const s = getSocket();
+         if (s && !s.connected) s.connect();
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, []);
+    const handleGlobalCallStart = (e: CustomEvent) => {
+       const { type } = e.detail;
+       setCallState({ active: true, type: type || 'video', incoming: false, connected: false });
+       setupWebRTC(type || 'video', true);
+    };
 
-  const handlePinSetupComplete = async (realPin: string, fakePin: string, nickname: string, avatar?: string) => {
-    const config = { id: 'pins', realPin, fakePin, nickname, avatar };
-    const db = await initDB();
-    await db.put('auth', config);
-    setAppConfig(config);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('start-global-call', handleGlobalCallStart as any);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('start-global-call', handleGlobalCallStart as any);
+    };
+  }, [partner, sharedKey]);
+
+  useEffect(() => {
+    if (!sharedKey) return;
+    const s = getSocket();
+    if (!s) return;
+
+    const handleReceive = async (data: any) => {
+       try {
+          const dec = await decryptMessage(sharedKey, data.encrypted, data.iv);
+          const payload = JSON.parse(dec);
+          if (payload.type === 'call:offer') {
+             setCallState({ active: true, type: payload.callType || 'video', incoming: true, connected: false, pendingSdp: payload.sdp });
+          } else if (payload.type === 'call:answer') {
+             if (pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+             setCallState(s => ({ ...s, connected: true }));
+          } else if (payload.type === 'call:ice') {
+             if (pcRef.current && pcRef.current.remoteDescription) {
+                await pcRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+             } else { iceCandidateQueue.current.push(payload.candidate); }
+          } else if (payload.type === 'call:end') { endCallUI(); }
+       } catch {}
+    };
+
+    s.on('message:receive', handleReceive);
+    return () => { s.off('message:receive', handleReceive); };
+  }, [sharedKey]);
+
+  useEffect(() => {
+    if (callState.active) {
+       if ('wakeLock' in navigator) (navigator as any).wakeLock.request('screen').then((lock: any) => { wakeLockRef.current = lock; }).catch(() => {});
+       if (callState.incoming) {
+          ringtoneSound.current?.play().catch(() => {});
+          if (Notification.permission === 'granted') {
+             new Notification('Incoming Secure Call', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any);
+          }
+       } else {
+          ringtoneSound.current?.pause();
+          if (ringtoneSound.current) ringtoneSound.current.currentTime = 0;
+       }
+       if (callState.connected) {
+          if (callDurationTimerRef.current) clearInterval(callDurationTimerRef.current);
+          setCallDuration(0);
+          callDurationTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+       }
+    } else {
+       ringtoneSound.current?.pause();
+       if (callDurationTimerRef.current) { clearInterval(callDurationTimerRef.current); callDurationTimerRef.current = null; }
+       if (wakeLockRef.current) { if (wakeLockRef.current.release) wakeLockRef.current.release(); wakeLockRef.current = null; }
+       setCallDuration(0);
+    }
+  }, [callState]);
+
+  const endCallUI = () => {
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
+    if (localStreamRef.current) { localStreamRef.current.getTracks().forEach((t: any) => t.stop()); localStreamRef.current = null; }
+    setCallState({ active: false, type: 'video', incoming: false, connected: false });
   };
+
+  const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
+    try {
+       const stream = await navigator.mediaDevices.getUserMedia({ video: type === 'video', audio: true });
+       localStreamRef.current = stream;
+       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+       pcRef.current = pc;
+       stream.getTracks().forEach(track => pc.addTrack(track, stream));
+       pc.ontrack = (e) => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; };
+       pc.onicecandidate = (e) => { 
+          if (e.candidate && sharedKey && partner?.userId) {
+             encryptMessage(sharedKey, JSON.stringify({type:'call:ice', candidate: e.candidate})).then(enc => {
+                getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+             });
+          }
+       };
+       if (isInitiator) {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
+          getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+       } else if (remoteSdp) {
+          await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:answer', sdp: pc.localDescription}));
+          getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+          while (iceCandidateQueue.current.length > 0) { const cand = iceCandidateQueue.current.shift(); await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(()=>{}); }
+       }
+    } catch(e) { endCallUI(); }
+  };
+
+  const acceptCall = () => { setCallState(s => ({ ...s, incoming: false, connected: true })); setupWebRTC(callState.type, false, callState.pendingSdp); };
+  const rejectCall = () => { if (sharedKey) encryptMessage(sharedKey, JSON.stringify({type:'call:end'})).then(enc => getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' })); endCallUI(); };
+  const formatTime = (secs: number) => { const m = Math.floor(secs / 60); const s = secs % 60; return `${m}:${s < 10 ? '0' : ''}${s}`; };
 
   const handleUnlock = (pin: string) => {
     if (!appConfig) return;
-
-    // Proactively request camera permission during this user gesture
-    navigator.mediaDevices?.getUserMedia({ video: true })
-      .then(s => s.getTracks().forEach(t => t.stop()))
-      .catch(() => {});
-
-    if (pin === appConfig.realPin) {
-      setIsUnlocked(true);
-      setIsFakeMode(false);
-    } else if (appConfig.fakePin && pin === appConfig.fakePin) {
-      setIsUnlocked(true);
-      setIsFakeMode(true);
-    }
-    // wrong PIN → do nothing (lock screen stays)
+    navigator.mediaDevices?.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+    if (pin === appConfig.realPin) { setIsUnlocked(true); setIsFakeMode(false); } else if (appConfig.fakePin && pin === appConfig.fakePin) { setIsUnlocked(true); setIsFakeMode(true); }
   };
 
-  // 1. Loading
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center"><div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
+  if (!appConfig) return <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />;
+  if (!isUnlocked) return <LockScreen onUnlock={handleUnlock} />;
+  if (!isPaired && !isFakeMode && appConfig) return <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />;
 
-  // 2. First launch → PIN setup
-  if (!appConfig) {
-    return <PinSetupScreen 
-      onComplete={handlePinSetupComplete} 
-      onRestore={() => window.location.reload()} 
-    />;
-  }
-
-  // 3. Lock screen
-  if (!isUnlocked) {
-    return <LockScreen onUnlock={handleUnlock} />;
-  }
-
-  // 4. Pairing screen (first time)
-  if (!isPaired && !isFakeMode && appConfig) {
-    return <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />;
-  }
-
-  // 5. Main app
   return (
     <div className="h-screen w-full bg-background overflow-hidden flex flex-col">
       <div className="flex-1 relative overflow-hidden">
         <AnimatePresence>
-          <motion.div
-            key={location.pathname + (isFakeMode ? '-fake' : '')}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.1, ease: 'linear' }}
-            className="absolute inset-0"
-          >
-            {isFakeMode ? (
-              <FakeCalculator />
-            ) : (
+          <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1, ease: 'linear' }} className="absolute inset-0">
+            {isFakeMode ? <FakeCalculator /> : (
               <Routes location={location}>
                 <Route path="/"       element={<DashboardScreen />} />
                 <Route path="/chat"   element={<ChatScreen />} />
@@ -237,15 +288,43 @@ const AppContent = () => {
         </AnimatePresence>
       </div>
       {!isFakeMode && <BottomNav />}
+
+      <AnimatePresence>
+        {callState.active && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-zinc-950 z-[1000] flex flex-col items-center justify-center p-6 text-white text-center">
+             <div className="absolute inset-0 bg-primary/10 animate-pulse pointer-events-none" />
+             <div className="relative flex flex-col items-center w-full max-w-sm">
+                <div className="w-24 h-24 rounded-full overflow-hidden mb-6 ring-4 ring-primary p-1 bg-zinc-800">
+                   <img src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId}`} className="w-full h-full rounded-full object-cover" />
+                </div>
+                <h2 className="text-2xl font-bold mb-2 uppercase tracking-wide">{partner?.nick || 'Partner'}</h2>
+                <p className="text-primary font-black uppercase tracking-[3px] text-[10px] mb-8">
+                   {callState.incoming ? 'Incoming Secure Connection...' : callState.connected ? `Live Connection • ${formatTime(callDuration)}` : 'Initiating...'}
+                </p>
+
+                {callState.type === 'video' && callState.connected && (
+                   <div className="w-full aspect-[3/4] rounded-3xl bg-black border border-white/5 overflow-hidden relative mb-8">
+                      <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                      <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-28 h-40 bg-black rounded-xl border border-white/10 object-cover" />
+                   </div>
+                )}
+
+                <div className="flex items-center space-x-12 mt-4">
+                   {callState.incoming ? (
+                      <>
+                        <button onClick={rejectCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><X size={28} /></button>
+                        <button onClick={acceptCall} className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 animate-bounce"><Phone size={28} /></button>
+                      </>
+                   ) : (
+                      <button onClick={rejectCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><Phone size={28} className="rotate-[135deg]" /></button>
+                   )}
+                </div>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-// ──────────────────────────────────────────────
-export default function App() {
-  return (
-    <Router>
-      <AppContent />
-    </Router>
-  );
-}
+export default function App() { return ( <Router><AppContent /></Router> ); }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Lock, Heart, Activity, Settings } from 'lucide-react';
+import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video } from 'lucide-react';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, decryptMessage } from '../lib/crypto';
@@ -297,6 +297,24 @@ export const DashboardScreen: React.FC = () => {
                   </h3>
                   <p className={`text-[9px] uppercase font-bold tracking-wider ${isTugging ? 'text-white/60' : 'text-white/30'}`}>Presence</p>
                </div>
+            </motion.button>
+
+            {/* CALL QUICK ACTIONS */}
+            <motion.button 
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
+               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'voice' } }))}
+               className="h-20 col-span-1 rounded-[28px] bg-sky-500 text-white flex items-center justify-center shadow-lg active:scale-95"
+            >
+               <Phone size={24} fill="white" />
+            </motion.button>
+            <motion.button 
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
+               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }))}
+               className="h-20 col-span-1 rounded-[28px] bg-primary text-white flex items-center justify-center shadow-lg active:scale-95"
+            >
+               <Video size={24} fill="white" />
             </motion.button>
          </div>
 
