@@ -358,64 +358,94 @@ const AppContent = () => {
     if (pin === appConfig.realPin) { setIsUnlocked(true); setIsFakeMode(false); } else if (appConfig.fakePin && pin === appConfig.fakePin) { setIsUnlocked(true); setIsFakeMode(true); }
   };
 
-  if (isLoading) return <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center"><div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
-  if (!appConfig) return <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />;
-  if (!isUnlocked) return <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />;
-  if (!isPaired && !isFakeMode && appConfig) return <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />;
-
   return (
-    <div className="h-screen w-full bg-background overflow-hidden flex flex-col">
-      <div className="flex-1 relative overflow-hidden">
-        <AnimatePresence>
-          <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1, ease: 'linear' }} className="absolute inset-0">
-            {isFakeMode ? <FakeCalculator /> : (
-              <Routes location={location}>
-                <Route path="/"       element={<DashboardScreen />} />
-                <Route path="/chat"   element={<ChatScreen />} />
-                <Route path="/vault"  element={<VaultScreen />} />
-                <Route path="/panic"  element={<PanicScreen />} />
-                <Route path="/settings" element={<SettingsScreen />} />
-              </Routes>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-      {!isFakeMode && <BottomNav />}
-
+    <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans">
+      
+      {/* ── GLOBAL CALL OVERLAY (Highest Z-Index) ── */}
       <AnimatePresence>
         {callState.active && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-zinc-950 z-[1000] flex flex-col items-center justify-center p-6 text-white text-center">
-             <div className="absolute inset-0 bg-primary/10 animate-pulse pointer-events-none" />
-             <div className="relative flex flex-col items-center w-full max-w-sm">
-                <div className="w-24 h-24 rounded-full overflow-hidden mb-6 ring-4 ring-primary p-1 bg-zinc-800">
-                   <img src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId}`} className="w-full h-full rounded-full object-cover" />
+          <motion.div 
+            initial={{ opacity: 0, scale: 1.1 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 1.1 }} 
+            className="fixed inset-0 bg-zinc-950 z-[9999] flex flex-col items-center justify-center p-6 text-white text-center"
+          >
+             {/* Background Pulse */}
+             <div className="absolute inset-0 bg-primary/5 animate-pulse pointer-events-none" />
+             <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-transparent to-black pointer-events-none" />
+
+             <div className="relative flex flex-col items-center w-full max-w-sm z-10">
+                <div className="w-24 h-24 rounded-[40px] overflow-hidden mb-6 ring-4 ring-white/10 p-1 bg-zinc-900 shadow-2xl">
+                   <img src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId}`} className="w-full h-full rounded-[36px] object-cover" />
                 </div>
-                <h2 className="text-2xl font-bold mb-2 uppercase tracking-wide">{partner?.nick || 'Partner'}</h2>
-                <p className="text-primary font-black uppercase tracking-[3px] text-[10px] mb-8">
-                   {callState.incoming ? 'Incoming Secure Connection...' : callState.connected ? `Live Connection • ${formatTime(callDuration)}` : 'Initiating...'}
-                </p>
+                <h2 className="text-3xl font-black mb-2 uppercase tracking-tighter">{partner?.nick || 'Partner'}</h2>
+                <div className="flex items-center space-x-2 mb-8 bg-white/5 px-4 py-1.5 rounded-full border border-white/5">
+                   <div className="w-2 h-2 bg-primary rounded-full animate-ping" />
+                   <p className="text-primary font-black uppercase tracking-[3px] text-[10px]">
+                      {callState.incoming ? 'Secure Request' : callState.connected ? `Live Connection • ${formatTime(callDuration)}` : 'Initiating...'}
+                   </p>
+                </div>
 
                 {callState.type === 'video' && callState.connected && (
-                   <div className="w-full aspect-[3/4] rounded-3xl bg-black border border-white/5 overflow-hidden relative mb-8">
+                   <div className="w-full aspect-[3/4] rounded-[40px] bg-black border border-white/5 overflow-hidden relative mb-10 shadow-2xl">
                       <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-                      <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-4 right-4 w-28 h-40 bg-black rounded-xl border border-white/10 object-cover" />
+                      <video ref={localVideoRef} autoPlay playsInline muted className="absolute bottom-6 right-6 w-32 h-44 bg-zinc-900 rounded-3xl border border-white/10 object-cover shadow-2xl" />
+                      <div className="absolute top-6 left-6 flex items-center space-x-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                         <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
+                         <span className="text-[10px] font-black uppercase tracking-widest text-white/80">Rec Active</span>
+                      </div>
                    </div>
                 )}
 
-                <div className="flex items-center space-x-12 mt-4">
+                <div className="flex items-center space-x-12">
                    {callState.incoming ? (
                       <>
-                        <button onClick={rejectCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><X size={28} /></button>
-                        <button onClick={acceptCall} className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 animate-bounce"><Phone size={28} /></button>
+                        <button onClick={rejectCall} className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-transform"><X size={32} /></button>
+                        <button onClick={acceptCall} className="w-20 h-20 bg-green-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 animate-bounce transition-transform"><Phone size={32} /></button>
                       </>
                    ) : (
-                      <button onClick={rejectCall} className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90"><Phone size={28} className="rotate-[135deg]" /></button>
+                      <button onClick={rejectCall} className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-transform"><Phone size={32} className="rotate-[135deg]" /></button>
                    )}
                 </div>
              </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── ACCESS CONTROL FLOW ── */}
+      {isLoading ? (
+        <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
+           <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      ) : !appConfig ? (
+        <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
+      ) : !isUnlocked ? (
+        <div className="flex-1 relative">
+           <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
+        </div>
+      ) : !isPaired && !isFakeMode ? (
+        <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
+      ) : (
+        /* ── AUTHENTICATED APP CONTENT ── */
+        <>
+          <div className="flex-1 relative overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
+                {isFakeMode ? <FakeCalculator /> : (
+                  <Routes location={location}>
+                    <Route path="/"       element={<DashboardScreen />} />
+                    <Route path="/chat"   element={<ChatScreen />} />
+                    <Route path="/vault"  element={<VaultScreen />} />
+                    <Route path="/panic"  element={<PanicScreen />} />
+                    <Route path="/settings" element={<SettingsScreen />} />
+                  </Routes>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          {!isFakeMode && <BottomNav />}
+        </>
+      )}
     </div>
   );
 };
