@@ -236,21 +236,68 @@ export const VaultScreen: React.FC = () => {
      }
   };
 
-  const deleteItem = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (confirm('Permanently delete from vault?')) {
-      const db = await initDB();
-      await db.delete('vault', id);
-      
-      const identity = await db.get('identity', 'me');
-      if (identity) {
-         await supabase.from('vault').delete().eq('id', id).eq('owner_id', identity.userId);
-      }
-      
-      await loadVault();
-      if (viewItem && viewItem.id === id) setViewItem(null);
-    }
-  };
+   const deleteItem = async (id: string, e?: React.MouseEvent) => {
+     if (e) e.stopPropagation();
+     if (confirm('Permanently delete from vault?')) {
+       const db = await initDB();
+       
+       // Handle Storage Cleanup
+       const item = await db.get('vault', id);
+       if (item && typeof item.data === 'string' && item.data.startsWith('storage://')) {
+          try {
+             const path = item.data.replace('storage://', '').split('::')[0];
+             await supabase.storage.from('vault').remove([path]);
+          } catch(e) { console.error('Storage cleanup failed', e); }
+       }
+
+       await db.delete('vault', id);
+       
+       const identity = await db.get('identity', 'me');
+       if (identity) {
+          await supabase.from('vault').delete().eq('id', id).eq('owner_id', identity.userId);
+       }
+       
+       await loadVault();
+       if (viewItem && viewItem.id === id) setViewItem(null);
+     }
+   };
+
+   const clearAllVault = async () => {
+     if (!confirm('☢️ NUCLEAR RESET: Are you sure? This will delete EVERY file in this vault across all your devices.')) return;
+     
+     const db = await initDB();
+     const allItems = await db.getAll('vault');
+     const identity = await db.get('identity', 'me');
+
+     setIsUploading(true);
+     try {
+        if (identity) {
+           // 1. Delete all rows from Supabase
+           await supabase.from('vault').delete().eq('owner_id', identity.userId);
+           
+           // 2. Cleanup all associated Storage files
+           const storagePaths = allItems
+              .filter(i => typeof i.data === 'string' && i.data.startsWith('storage://'))
+              .map(i => i.data.replace('storage://', '').split('::')[0]);
+           
+           if (storagePaths.length > 0) {
+              await supabase.storage.from('vault').remove(storagePaths);
+           }
+        }
+        // 3. Clear Local IndexDB
+        await db.clear('vault');
+        alert('Vault has been completely wiped.');
+        await loadVault();
+     } catch(e) {
+        console.error(e);
+        alert('Partial failure deleting cloud data. Local vault cleared.');
+        await db.clear('vault');
+        await loadVault();
+     } finally {
+        setIsUploading(false);
+     }
+   };
+
 
   const downloadItem = (item: {data: string, type: string}, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -266,11 +313,26 @@ export const VaultScreen: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] no-scrollbar overflow-y-auto w-full">
-      <div className="pt-20 px-6 pb-6 text-center">
+      <div className="pt-20 px-6 pb-6 relative flex flex-col items-center">
         <h1 className="text-2xl font-semibold text-white mb-1">
            {activeCategory ? (activeCategory === 'photo' ? 'Photos' : activeCategory === 'video' ? 'Videos' : activeCategory === 'secret' ? 'Secret Drops' : 'Voice Notes') : 'Memory Vault 🔒'}
         </h1>
         <p className="text-sm text-white/40">{activeCategory ? 'Your private collection' : 'Locally Encrypted & Secure'}</p>
+        
+        {!activeCategory && items.length > 0 && (
+           <button 
+             onClick={clearAllVault}
+             className="mt-4 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] items-center space-x-1 uppercase tracking-widest py-1.5 px-4 rounded-full font-black active:scale-95 transition-transform"
+           >
+              <span>Nuclear Clear</span>
+           </button>
+        )}
+
+        {activeCategory && (
+           <button onClick={() => setActiveCategory(null)} className="absolute top-20 right-8 text-white/20 hover:text-white transition-colors">
+              <X size={20} />
+           </button>
+        )}
       </div>
 
       <AnimatePresence mode="wait">
