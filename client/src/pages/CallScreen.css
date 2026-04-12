@@ -1,0 +1,240 @@
+/* ══════════════════════════════════════════════
+   CallScreen - Nuclear isolation CSS
+   Forces full-screen takeover on ALL mobile browsers
+   ══════════════════════════════════════════════ */
+
+/* When call is active, kill EVERYTHING on body */
+body.call-active,
+body.call-active * {
+  background-image: none !important;
+}
+
+body.call-active {
+  background: #000 !important;
+  overflow: hidden !important;
+}
+
+body.call-active > #root {
+  background: #000 !important;
+}
+
+/* The call screen container - absolute fullscreen takeover */
+.call-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh; /* dynamic viewport height for mobile */
+  z-index: 999999;
+  background: #050505;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  -webkit-transform: translateZ(0); /* Force GPU layer */
+  transform: translateZ(0);
+  isolation: isolate;
+  contain: layout style paint;
+}
+
+/* Subtle purple ambient glow */
+.call-screen__glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, rgba(139, 92, 246, 0.12) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* Main content wrapper */
+.call-screen__content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+  padding: 0 24px;
+}
+
+/* Avatar */
+.call-screen__avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 40px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 24px;
+  background: #111;
+  flex-shrink: 0;
+}
+
+.call-screen__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Pulse animation for incoming */
+.call-screen__avatar--ringing {
+  animation: avatar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes avatar-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 20px rgba(34, 197, 94, 0); }
+}
+
+/* Partner name */
+.call-screen__name {
+  font-size: 36px;
+  font-weight: 900;
+  margin: 0 0 10px 0;
+  letter-spacing: -1px;
+  color: white;
+  line-height: 1;
+}
+
+/* Status badge */
+.call-screen__status {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 100px;
+  padding: 10px 25px;
+  margin-bottom: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.call-screen__status-text {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: #8b5cf6;
+}
+
+/* Buttons container */
+.call-screen__actions {
+  display: flex;
+  gap: 50px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Individual button column */
+.call-screen__btn-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Common button base */
+.call-screen__btn {
+  border-radius: 50%;
+  border: none;
+  color: white;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+  outline: none;
+}
+
+.call-screen__btn:active {
+  transform: scale(0.92);
+}
+
+/* Decline button */
+.call-screen__btn--decline {
+  width: 85px;
+  height: 85px;
+  background: #ef4444;
+  font-size: 30px;
+  box-shadow: 0 15px 40px rgba(239, 68, 68, 0.4);
+}
+
+/* Answer button */
+.call-screen__btn--answer {
+  width: 85px;
+  height: 85px;
+  background: #22c55e;
+  font-size: 30px;
+  box-shadow: 0 15px 40px rgba(34, 197, 94, 0.4);
+  animation: answer-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes answer-pulse {
+  0%, 100% { box-shadow: 0 15px 40px rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 15px 60px rgba(34, 197, 94, 0.7); }
+}
+
+/* End call button (outgoing/connected) */
+.call-screen__btn--end {
+  width: 100px;
+  height: 100px;
+  background: #ef4444;
+  font-size: 35px;
+  box-shadow: 0 20px 50px rgba(239, 68, 68, 0.4);
+}
+
+/* Button labels */
+.call-screen__btn-label {
+  margin-top: 15px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  opacity: 0.5;
+}
+
+.call-screen__btn-label--decline {
+  color: #ef4444;
+}
+
+.call-screen__btn-label--answer {
+  color: #22c55e;
+}
+
+.call-screen__btn-label--end {
+  font-size: 12px;
+  opacity: 0.3;
+  color: white;
+}
+
+/* Video feed layer */
+.call-screen__video-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: black;
+}
+
+.call-screen__video-remote {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.8;
+}
+
+.call-screen__video-local {
+  position: absolute;
+  bottom: 40px;
+  right: 30px;
+  width: 130px;
+  height: 190px;
+  border-radius: 30px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  object-fit: cover;
+  z-index: 2;
+}
