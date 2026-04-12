@@ -359,52 +359,56 @@ const AppContent = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans">
-      {/* ── ACCESS CONTROL FLOW ── */}
-      {isLoading ? (
-        <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
-           <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
-      ) : !appConfig ? (
-        <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
-      ) : !isUnlocked ? (
-        <div className="flex-1 relative">
-           <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
-        </div>
-      ) : !isPaired && !isFakeMode ? (
-        <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
-      ) : (
-        /* ── AUTHENTICATED APP CONTENT ── */
-        <>
-          <div className="flex-1 relative overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
-                {isFakeMode ? <FakeCalculator /> : (
-                  <Routes location={location}>
-                    <Route path="/"       element={<DashboardScreen />} />
-                    <Route path="/chat"   element={<ChatScreen />} />
-                    <Route path="/vault"  element={<VaultScreen />} />
-                    <Route path="/panic"  element={<PanicScreen />} />
-                    <Route path="/settings" element={<SettingsScreen />} />
-                  </Routes>
-                )}
-              </motion.div>
-            </AnimatePresence>
+    <>
+      <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative">
+        {/* ── ACCESS CONTROL FLOW ── */}
+        {isLoading ? (
+          <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
+             <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
-          {!isFakeMode && <BottomNav />}
-        </>
-      )}
+        ) : !appConfig ? (
+          <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
+        ) : !isUnlocked ? (
+          <div className="flex-1 relative">
+             <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
+          </div>
+        ) : !isPaired && !isFakeMode ? (
+          <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
+        ) : (
+          /* ── AUTHENTICATED APP CONTENT ── */
+          <>
+            <div className="flex-1 relative overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
+                  {isFakeMode ? <FakeCalculator /> : (
+                    <Routes location={location}>
+                      <Route path="/"       element={<DashboardScreen />} />
+                      <Route path="/chat"   element={<ChatScreen />} />
+                      <Route path="/vault"  element={<VaultScreen />} />
+                      <Route path="/panic"  element={<PanicScreen />} />
+                      <Route path="/settings" element={<SettingsScreen />} />
+                    </Routes>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+            {!isFakeMode && <BottomNav />}
+          </>
+        )}
+      </div>
 
-      {/* ── FINAL GLOBAL CALL LAYER (Absolutely Top-Level) ── */}
+      {/* ── ABSOLUTE TOP-LEVEL CALL OVERLAY ── */}
       {callState.active && (
         <div 
           style={{ 
             position: 'fixed', 
             top: 0, 
             left: 0, 
+            right: 0,
+            bottom: 0,
             width: '100vw', 
             height: '100vh', 
-            zIndex: 1000000, 
+            zIndex: 2147483647, 
             backgroundColor: '#050505', 
             display: 'flex', 
             flexDirection: 'column',
@@ -412,12 +416,12 @@ const AppContent = () => {
             justifyContent: 'center', 
             padding: '24px',
             textAlign: 'center', 
-            color: 'white'
+            color: 'white',
+            overflow: 'hidden'
           }}
         >
            {/* Visual background flourish */}
            <div className="absolute inset-0 bg-primary/20 opacity-30 animate-pulse pointer-events-none" />
-           <div className="absolute inset-0 bg-black/40 pointer-events-none" />
            
            <div className="relative z-[101] flex flex-col items-center w-full max-w-xs">
               {/* Partner Section */}
@@ -479,7 +483,7 @@ const AppContent = () => {
 
            {/* Video Feed (Full Screen) */}
            {callState.type === 'video' && callState.connected && (
-              <div className="fixed inset-0 z-[-1] bg-black">
+              <div style={{ position: 'fixed', inset: 0, zIndex: -1, backgroundColor: 'black' }}>
                  <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover opacity-80" />
                  <video 
                    ref={localVideoRef} 
@@ -501,7 +505,7 @@ const AppContent = () => {
            )}
         </div>
       )}
-    </div>
+    </>
   );
 };
 
