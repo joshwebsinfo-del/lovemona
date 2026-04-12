@@ -9,9 +9,14 @@ import { encryptMessage, decryptMessage, importPublicKey, deriveSharedSecret } f
 export const VaultScreen: React.FC = () => {
   const [items, setItems] = useState<{id: string, name: string, type: string, data: string, timestamp: number}[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'photo' | 'video' | 'voice' | null>(null);
+  const [activeCategory, setActiveCategory] = useState<'photo' | 'video' | 'voice' | 'secret' | null>(null);
   const [viewItem, setViewItem] = useState<{id: string, name: string, type: string, data: string, timestamp: number} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const secretFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingSecretFile, setPendingSecretFile] = useState<{ b64: string, name: string, type: string } | null>(null);
+  const [secretPassword, setSecretPassword] = useState('');
+  const [unlockPrompt, setUnlockPrompt] = useState<any | null>(null);
+  const [unlockPassword, setUnlockPassword] = useState('');
 
   const loadVault = async () => {
     const db = await initDB();
@@ -85,6 +90,12 @@ export const VaultScreen: React.FC = () => {
            reader.onerror = reject;
            reader.readAsDataURL(file);
          });
+         }
+
+      if (e.target === secretFileInputRef.current) {
+         setPendingSecretFile({ b64, name: file.name, type: file.type.startsWith('video') ? 'video' : 'photo' });
+         setIsUploading(false);
+         return;
       }
 
       const newItem = {
@@ -136,7 +147,65 @@ export const VaultScreen: React.FC = () => {
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (secretFileInputRef.current) secretFileInputRef.current.value = '';
     }
+  };
+
+  const handleSaveSecretDrop = async () => {
+     if (!pendingSecretFile || !secretPassword) return;
+     setIsUploading(true);
+     setPendingSecretFile(null); // Close the prompt immediately
+
+     try {
+       const newItem = {
+         id: Date.now().toString(),
+         name: pendingSecretFile.name,
+         type: 'secret',
+         data: JSON.stringify({ password: secretPassword, mediaData: pendingSecretFile.b64, actualType: pendingSecretFile.type }),
+         timestamp: Date.now(),
+         locked: true
+       };
+       
+       const db = await initDB();
+       await db.put('vault', newItem);
+       
+       const identity = await db.get('identity', 'me');
+       const partner = await db.get('partner', 'partner');
+       if (identity && partner) {
+          try {
+              const pk = await importPublicKey(partner.publicKeyPem);
+              const sharedKey = await deriveSharedSecret(identity.privateKey, pk);
+              const enc = await encryptMessage(sharedKey, newItem.data);
+              await supabase.from('vault').insert([
+                { id: newItem.id + "_me", owner_id: identity.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp },
+                { id: newItem.id + "_partner", owner_id: partner.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp }
+              ]);
+          } catch { /* ignored */ }
+       }
+       await loadVault();
+     } catch {
+       alert('Failed to save Secret Drop');
+     } finally {
+       setIsUploading(false);
+       setSecretPassword('');
+     }
+  };
+
+  const handleUnlockDrop = () => {
+     if (!unlockPrompt) return;
+     try {
+       const dec = JSON.parse(unlockPrompt.data);
+       if (dec.password === unlockPassword.trim()) {
+           setViewItem({ ...unlockPrompt, data: dec.mediaData, type: dec.actualType });
+           setUnlockPrompt(null);
+           setUnlockPassword('');
+       } else {
+           alert('Incorrect Password!');
+           setUnlockPassword('');
+       }
+     } catch {
+         alert('Corrupted drop.');
+     }
   };
 
   const deleteItem = async (id: string, e?: React.MouseEvent) => {
@@ -171,7 +240,7 @@ export const VaultScreen: React.FC = () => {
     <div className="flex flex-col h-full bg-[#0a0a0c] no-scrollbar overflow-y-auto w-full">
       <div className="pt-20 px-6 pb-6 text-center">
         <h1 className="text-2xl font-semibold text-white mb-1">
-           {activeCategory ? (activeCategory === 'photo' ? 'Photos' : activeCategory === 'video' ? 'Videos' : 'Voice Notes') : 'Memory Vault 🔒'}
+           {activeCategory ? (activeCategory === 'photo' ? 'Photos' : activeCategory === 'video' ? 'Videos' : activeCategory === 'secret' ? 'Secret Drops' : 'Voice Notes') : 'Memory Vault 🔒'}
         </h1>
         <p className="text-sm text-white/40">{activeCategory ? 'Your private collection' : 'Locally Encrypted & Secure'}</p>
       </div>
@@ -189,6 +258,7 @@ export const VaultScreen: React.FC = () => {
               { id: 'photo', icon: ImageIcon, label: 'Photos',      count: items.filter(i => i.type === 'photo').length, color: 'text-blue-400', bg: 'bg-blue-500/10' },
               { id: 'video', icon: Video,     label: 'Videos',      count: items.filter(i => i.type === 'video').length, color: 'text-amber-400', bg: 'bg-amber-500/10' },
               { id: 'voice', icon: Mic,       label: 'Voice Notes', count: items.filter(i => i.type === 'voice').length, color: 'text-pink-400', bg: 'bg-pink-500/10' },
+              { id: 'secret', icon: Lock,     label: 'Secret Drops',count: items.filter(i => i.type === 'secret').length, color: 'text-red-400', bg: 'bg-red-500/20' },
             ].map((folder) => (
               <button 
                 key={folder.id}
@@ -244,10 +314,15 @@ export const VaultScreen: React.FC = () => {
                   <motion.div
                     key={item.id}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => setViewItem(item)}
+                    onClick={() => {
+                        if (item.type === 'secret') setUnlockPrompt(item);
+                        else setViewItem(item);
+                    }}
                     className="relative aspect-square rounded-[24px] overflow-hidden bg-white/5 border border-white/10 group cursor-pointer shadow-lg"
                   >
-                    {item.type === 'photo' ? (
+                    {item.type === 'secret' ? (
+                      <div className="w-full h-full flex items-center justify-center bg-red-500/10"><Lock size={36} className="text-red-500/50" /></div>
+                    ) : item.type === 'photo' ? (
                       <img src={item.data} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt={item.name} />
                     ) : item.type === 'video' ? (
                       <video src={item.data} className="w-full h-full object-cover opacity-80" />
@@ -283,21 +358,77 @@ export const VaultScreen: React.FC = () => {
       </AnimatePresence>
 
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={handleFileUpload} />
+      <input type="file" ref={secretFileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
 
-      <button 
-        onClick={() => fileInputRef.current?.click()}
-        disabled={isUploading}
-        className="fixed bottom-24 left-1/2 -translate-x-1/2 flex items-center space-x-2 px-8 py-3.5 bg-gradient-to-br from-primary to-orange-500 rounded-full text-white text-[15px] font-bold shadow-2xl shadow-primary/30 z-30 active:scale-95 transition-all w-64 justify-center"
-      >
-        {isUploading ? (
-           <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-        ) : (
-           <>
-             <Plus size={18} strokeWidth={2.5} />
-             <span>Upload to Vault</span>
-           </>
-        )}
-      </button>
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 flex space-x-2 z-30">
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex items-center space-x-2 px-6 py-3.5 bg-gradient-to-br from-primary to-orange-500 rounded-full text-white text-[15px] font-bold shadow-2xl shadow-primary/30 active:scale-95 transition-all"
+          >
+            {isUploading && !pendingSecretFile ? (
+               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+               <>
+                 <Plus size={18} strokeWidth={2.5} />
+                 <span>Upload</span>
+               </>
+            )}
+          </button>
+          
+          <button 
+            onClick={() => secretFileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex items-center space-x-2 px-6 py-3.5 bg-red-600 rounded-full text-white text-[15px] font-bold shadow-2xl shadow-red-500/30 active:scale-95 transition-all"
+          >
+             <Lock size={18} strokeWidth={2.5} />
+             <span>Secret Drop</span>
+          </button>
+      </div>
+
+      {/* Secret Password Setup Prompt */}
+      {pendingSecretFile && (
+         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col justify-center items-center px-6">
+            <h2 className="text-white font-bold text-2xl mb-2 text-center text-red-500">Lock This Drop</h2>
+            <p className="text-white/60 text-center mb-8 text-sm max-w-sm">Determine a password. Your partner will only be able to open this media if they guess or know the password.</p>
+            
+            <input 
+               type="text" 
+               placeholder="Enter Secret Key Password..." 
+               value={secretPassword}
+               onChange={(e) => setSecretPassword(e.target.value)}
+               className="w-full max-w-xs bg-white/10 px-6 py-4 rounded-2xl text-white text-center font-bold tracking-widest outline-none border border-red-500/50 focus:border-red-500 focus:bg-red-500/10 transition-all mb-8 shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+            />
+            
+            <div className="flex space-x-4">
+               <button onClick={() => setPendingSecretFile(null)} className="px-6 py-3 rounded-full bg-white/10 text-white font-bold">Cancel</button>
+               <button onClick={handleSaveSecretDrop} className="px-6 py-3 rounded-full bg-red-500 text-white font-bold shadow-[0_0_20px_rgba(239,68,68,0.5)]">Lock & Upload</button>
+            </div>
+         </div>
+      )}
+
+      {/* Secret Key Unlock Prompt */}
+      {unlockPrompt && (
+         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col justify-center items-center px-6">
+            <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 border border-red-500/50">
+               <Lock size={32} className="text-red-500" />
+            </div>
+            <h2 className="text-white font-bold text-xl mb-8 tracking-widest uppercase">Encrypted Drop</h2>
+            
+            <input 
+               type="password" 
+               placeholder="Enter Key..." 
+               value={unlockPassword}
+               onChange={(e) => setUnlockPassword(e.target.value)}
+               className="w-full max-w-xs bg-white/10 px-6 py-4 rounded-2xl text-white text-center font-bold tracking-widest outline-none border border-white/20 focus:border-white focus:bg-white/20 transition-all mb-8"
+            />
+            
+            <div className="flex space-x-4">
+               <button onClick={() => { setUnlockPrompt(null); setUnlockPassword(''); }} className="px-6 py-3 rounded-full bg-white/10 text-white font-bold">Cancel</button>
+               <button onClick={handleUnlockDrop} className="px-6 py-3 rounded-full bg-white text-black font-bold active:scale-95">Unlock</button>
+            </div>
+         </div>
+      )}
 
       <AnimatePresence>
          {viewItem && (

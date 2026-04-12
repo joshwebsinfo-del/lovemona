@@ -133,6 +133,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [fullScreenMap, setFullScreenMap] = useState<{lat: number, lng: number} | null>(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState('');
 
@@ -142,6 +143,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const notificationSound = useRef<HTMLAudioElement | null>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
   // Initialize notification sound & permissions
   useEffect(() => {
@@ -765,12 +767,101 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   };
 
   const cancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && (isRecording || isVideoRecording)) {
       mediaRecorderRef.current.stop();
       audioChunksRef.current = []; // dump the array
       setIsRecording(false);
+      setIsVideoRecording(false);
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      if (videoPreviewRef.current?.srcObject) {
+         (videoPreviewRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+         videoPreviewRef.current.srcObject = null;
+      }
     }
+  };
+
+  const startVideoNote = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+      const mr = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      mediaRecorderRef.current = mr;
+      audioChunksRef.current = [];
+      
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+         if (audioChunksRef.current.length === 0) return;
+         const videoBlob = new Blob(audioChunksRef.current, { type: 'video/webm' });
+         
+         const file = new File([videoBlob], `VideoNote_${Date.now()}.webm`, { type: 'video/webm' });
+         
+         setIsProcessingMedia(true);
+         try {
+            const db = await initDB();
+            const msgId = Date.now().toString();
+            let payload: ChatPayload;
+            
+            if (sharedKey) {
+               const arrayBuffer = await file.arrayBuffer();
+               const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer as any);
+               const storagePath = `media/${myUserId}/${msgId}_${file.name}`;
+               const ivB64 = bufferToBase64(iv.buffer as any);
+               const { error: storageErr } = await supabase.storage.from('media').upload(storagePath, encrypted);
+               if (storageErr) throw storageErr;
+               
+               payload = { type: 'media', text: 'Video Note', mediaType: 'video/webm', storagePath, storageIv: ivB64 };
+               
+               const reader = new FileReader();
+               reader.readAsDataURL(file);
+               await new Promise(r => { reader.onload = r; });
+               const b64 = reader.result as string;
+               const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+               setMessages(prev => [...prev, msg]);
+               scrollToBottom();
+               await db.put('messages', msg);
+               await sendSecurePayload(payload, msgId);
+            }
+         } catch(e) {
+            alert('Failed to send Video Note.');
+         } finally {
+            setIsProcessingMedia(false);
+         }
+      };
+      
+      mr.start();
+      setIsVideoRecording(true);
+      setRecordDuration(0);
+      
+      // Hook up UI Preview
+      setTimeout(() => {
+         if (videoPreviewRef.current) {
+            videoPreviewRef.current.srcObject = stream;
+            videoPreviewRef.current.play().catch(()=>{});
+         }
+      }, 100);
+
+      recordTimerRef.current = setInterval(() => {
+         setRecordDuration((prev) => {
+            if (prev >= 59) {
+               stopVideoNote();
+               return prev + 1;
+            }
+            return prev + 1;
+         });
+      }, 1000);
+    } catch {
+      alert('Could not access camera for Video Note.');
+    }
+  };
+
+  const stopVideoNote = () => {
+     if (mediaRecorderRef.current && isVideoRecording) {
+        mediaRecorderRef.current.stop();
+        setIsVideoRecording(false);
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+        if (videoPreviewRef.current?.srcObject) {
+           (videoPreviewRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        }
+     }
   };
 
   const clearChat = async () => {
@@ -853,6 +944,20 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] relative overflow-hidden w-full">
+      {isVideoRecording && (
+         <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center">
+            <video ref={videoPreviewRef} className="w-full h-full object-cover" muted playsInline />
+            <div className="absolute top-12 flex flex-col items-center">
+               <div className="text-red-500 font-bold text-2xl animate-pulse">{formatTime(recordDuration)} / 1:00</div>
+               <div className="text-white/60 text-xs mt-2 uppercase tracking-widest bg-black/50 px-4 py-1 rounded-full">High Quality Video Note</div>
+            </div>
+            <div className="absolute bottom-20 flex space-x-6">
+               <button onClick={cancelRecording} className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white active:scale-95"><X size={28} /></button>
+               <button onClick={stopVideoNote} className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-[0_0_40px_rgba(239,68,68,0.6)]"><Send size={32} /></button>
+            </div>
+         </div>
+      )}
+
       {/* BACKGROUND WALLPAPER */}
       <LiveWallpaper type={wallpaper} audioLevel={audioLevel} />
       
@@ -1014,6 +1119,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                     </button>
                    <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
                       <Camera size={22} />
+                   </button>
+                   <button onClick={startVideoNote} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
+                      <Video size={22} />
                    </button>
                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
                    
