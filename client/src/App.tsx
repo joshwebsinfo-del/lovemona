@@ -310,9 +310,17 @@ const AppContent = () => {
   // ── Camera management ──
   const acquireVideoTrack = async (mode: 'user' | 'environment') => {
     try {
-      const newStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
-      });
+      // Prioritize strict exact lens transition for mobile, fallback to soft constraint
+      let newStream;
+      try {
+          newStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: { exact: mode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
+          });
+      } catch (fallout) {
+          newStream = await navigator.mediaDevices.getUserMedia({ 
+              video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
+          });
+      }
       const newVideoTrack = newStream.getVideoTracks()[0];
 
       if (!localStreamRef.current) {
