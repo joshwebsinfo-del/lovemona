@@ -59,7 +59,7 @@ export const PinSetupScreen: React.FC<PinSetupProps> = ({ onComplete, onRestore 
   };
 
   const handleRealPin = () => {
-    if (realPin.length < 4) { setError('PIN must be at least 4 digits.'); return; }
+    if (realPin.length !== 6) { setError('PIN must be exactly 6 digits.'); return; }
     if (realPin !== confirm) { setError('PINs do not match.'); return; }
     setError('');
     setConfirm('');
@@ -67,7 +67,7 @@ export const PinSetupScreen: React.FC<PinSetupProps> = ({ onComplete, onRestore 
   };
 
   const handleFakePin = () => {
-    if (fakePin.length < 4) { setError('Fake PIN must be at least 4 digits.'); return; }
+    if (fakePin.length !== 6) { setError('Fake PIN must be exactly 6 digits.'); return; }
     if (fakePin === realPin) { setError('Fake PIN cannot be the same as your real PIN.'); return; }
     setError('');
     onComplete(realPin, fakePin, nickname.trim(), avatar);

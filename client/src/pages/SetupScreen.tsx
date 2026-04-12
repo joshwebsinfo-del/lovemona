@@ -17,13 +17,14 @@ interface SetupScreenProps {
 }
 
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
-  const [mode, setMode] = useState<'decision' | 'show' | 'scan'>('decision');
+  const [mode, setMode] = useState<'decision' | 'show' | 'scan' | 'manual'>('decision');
   const [myId, setMyId] = useState<string>('');
   const [publicKey, setPublicKey] = useState<string>('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
+  const [enteredPartnerId, setEnteredPartnerId] = useState('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,7 +43,69 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-  }, []);
+  }, []);  const handleManualConnect = () => {
+    if (!enteredPartnerId) return;
+    setIsConnecting(true);
+    socketRef.current?.emit('pair:connect', {
+      partnerId: enteredPartnerId,
+      myId: myIdRef.current,
+      publicKey: publicKeyRef.current,
+      nick: config.nickname,
+      avatar: config.avatar
+    });
+  };
+
+  const handleAutoPair = async () => {
+    try {
+      setIsConnecting(true);
+      const db = await initDB();
+      const identity = await db.get('identity', 'me');
+      if (!identity) throw new Error('Identity not found');
+
+      const testPartnerId = 'test_' + crypto.randomUUID().split('-')[0];
+      const testPartnerKeys = await generateKeyPair();
+      const testPartnerPubKey = await exportPublicKey(testPartnerKeys.publicKey);
+      
+      const testPartnerData: Partner = {
+        id: 'partner',
+        userId: testPartnerId,
+        publicKeyPem: testPartnerPubKey,
+        nick: 'Test Partner',
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${testPartnerId}`
+      };
+
+      // 1. Register test partner in Supabase
+      await supabase.from('users').insert({
+        user_id: testPartnerId,
+        nickname: testPartnerData.nick,
+        avatar: testPartnerData.avatar,
+        real_pin: '0000',
+        fake_pin: '9999',
+        public_key: testPartnerPubKey,
+        private_key: testPartnerKeys.privateKey,
+        created_at: Date.now()
+      });
+
+      // 2. Create partnership in Supabase
+      await supabase.from('partnerships').insert({
+        user_id: identity.userId,
+        partner_id: testPartnerId,
+        partner_public_key: testPartnerPubKey,
+        partner_nickname: testPartnerData.nick,
+        partner_avatar: testPartnerData.avatar,
+        paired_at: Date.now()
+      });
+
+      // 3. Save locally
+      await db.put('partner', testPartnerData);
+      
+      setTimeout(() => onPair(testPartnerData), 1000);
+    } catch (err) {
+      console.error('Auto-pair error:', err);
+      setError('Auto-pair failed. Check Supabase connection.');
+      setIsConnecting(false);
+    }
+  };
 
   function scanFrame() {
     const video = videoRef.current;
@@ -200,7 +263,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
     }
   };
 
-  const handleModeChange = (newMode: 'decision' | 'show' | 'scan') => {
+  const handleModeChange = (newMode: 'decision' | 'show' | 'scan' | 'manual') => {
     if (mode === 'scan') stopCamera();
     setMode(newMode);
     if (newMode === 'scan') {
@@ -243,6 +306,62 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                 <Camera size={24} className="text-primary" />
                 <span>Scan Partner's</span>
               </button>
+              <button onClick={() => handleModeChange('manual')} className="w-full h-14 bg-white/5 text-white/60 rounded-[20px] font-bold text-sm border border-white/5 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center space-x-2">
+                <span>Pair via Partner ID</span>
+              </button>
+              
+              <div className="pt-4 flex flex-col items-center">
+                 <span className="text-[10px] font-black uppercase tracking-[2px] text-white/20 mb-2">My Secure ID</span>
+                 <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 flex items-center space-x-3">
+                    <span className="text-xs font-mono text-primary/80">{myId}</span>
+                    <button 
+                      onClick={() => { navigator.clipboard.writeText(myId); }}
+                      className="text-[10px] font-bold text-white/40 hover:text-white uppercase tracking-wider"
+                    >Copy</button>
+                 </div>
+              </div>
+
+              <div className="pt-8 flex flex-col items-center">
+                 <button 
+                    onClick={handleAutoPair}
+                    className="text-[10px] font-black uppercase tracking-[2px] text-primary/40 hover:text-primary transition-all p-2"
+                 >
+                    [ Developer: Auto-Generate Partner ]
+                 </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {mode === 'manual' && (
+          <motion.div key="manual" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex flex-col h-full items-center justify-center text-center space-y-8 px-4">
+            <button onClick={() => handleModeChange('decision')} className="absolute top-6 left-6 w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white transition-colors"><ArrowLeft size={24} /></button>
+            
+            <div className="space-y-3">
+              <h2 className="text-3xl font-black text-white tracking-tight">MANUAL PAIR</h2>
+              <p className="text-white/40 text-sm font-medium">Enter your partner's Secure ID to connect</p>
+            </div>
+
+            <div className="w-full space-y-4">
+              <input 
+                type="text" 
+                value={enteredPartnerId} 
+                onChange={(e) => setEnteredPartnerId(e.target.value)}
+                placeholder="Partner ID (e.g. user_abcd...)"
+                className="w-full h-16 bg-white/5 border border-white/10 rounded-[24px] px-6 text-white font-mono text-center focus:outline-none focus:border-primary/50 transition-all"
+              />
+              <button 
+                onClick={handleManualConnect}
+                disabled={!enteredPartnerId || isConnecting}
+                className="w-full h-16 bg-primary text-white rounded-[24px] font-black text-lg shadow-[0_10px_30px_rgba(255,107,0,0.3)] active:scale-95 transition-all flex items-center justify-center space-x-3 disabled:opacity-50 disabled:grayscale"
+              >
+                {isConnecting ? <Loader2 size={24} className="animate-spin" /> : <RefreshCw size={24} />}
+                <span>{isConnecting ? 'Connecting...' : 'Establish Link'}</span>
+              </button>
+            </div>
+
+            <div className="pt-8 opacity-40">
+               <p className="text-[11px] font-bold uppercase tracking-[2px]">Ensuring End-to-End Encryption</p>
             </div>
           </motion.div>
         )}

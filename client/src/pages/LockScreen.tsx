@@ -15,6 +15,26 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   const [rescueId, setRescueId] = useState('');
   const [rescueError, setRescueError] = useState('');
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeyPress(e.key);
+      } else if (e.key === 'Enter') {
+        handleUnlockClick();
+      } else if (e.key === 'Backspace') {
+        setDisplay(prev => {
+          const next = prev.slice(0, -1);
+          const newDots = new Array(6).fill(false);
+          for (let i = 0; i < next.length; i++) newDots[i] = true;
+          setDots(newDots);
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [display]);
+
   const handleKeyPress = (num: string) => {
     if (display.length < 6) {
       const newDisplay = display + num;

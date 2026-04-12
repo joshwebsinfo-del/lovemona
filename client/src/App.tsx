@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
@@ -185,7 +186,14 @@ const AppContent = () => {
           if (payload.type === 'call:offer') {
              setCallState({ active: true, type: payload.callType || 'video', incoming: true, connected: false, pendingSdp: payload.sdp });
           } else if (payload.type === 'call:answer') {
-             if (pcRef.current) await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+             if (pcRef.current) {
+                await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+                // Flush queued candidates
+                while (iceCandidateQueue.current.length > 0) {
+                   const cand = iceCandidateQueue.current.shift();
+                   await pcRef.current.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                }
+             }
              setCallState(s => ({ ...s, connected: true }));
           } else if (payload.type === 'call:ice') {
              if (pcRef.current && pcRef.current.remoteDescription) {
@@ -236,11 +244,17 @@ const AppContent = () => {
         ? `Live Call • ${formatTime(callDuration)}` 
         : 'Connecting...';
 
-    return (
+    return createPortal(
       <div 
+        id="call-overlay-root"
         style={{
           position: 'fixed',
-          inset: 0,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100vw',
+          height: '100vh',
           zIndex: 2147483647,
           backgroundColor: '#050505',
           display: 'flex',
@@ -250,12 +264,14 @@ const AppContent = () => {
           padding: '30px',
           textAlign: 'center',
           color: 'white',
-          fontFamily: 'sans-serif'
+          fontFamily: 'sans-serif',
+          visibility: 'visible',
+          opacity: 1
         }}
       >
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at center, #8b5cf61a 0%, transparent 70%)', pointerEvents: 'none' }} />
         
-        <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '320px' }}>
+        <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '320px' }}>
           {/* Avatar */}
           <div style={{ width: '120px', height: '120px', borderRadius: '40px', overflow: 'hidden', border: '2px solid rgba(255,255,255,0.1)', marginBottom: '24px', background: '#111' }}>
             <img src={avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Avatar" />
@@ -319,7 +335,8 @@ const AppContent = () => {
             />
           </div>
         )}
-      </div>
+      </div>,
+      document.body
     );
   };
 
@@ -331,9 +348,11 @@ const AppContent = () => {
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
     if (localStreamRef.current) { localStreamRef.current.getTracks().forEach((t: any) => t.stop()); localStreamRef.current = null; }
     setCallState({ active: false, type: 'video', incoming: false, connected: false });
+    iceCandidateQueue.current = [];
   };
 
   const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any) => {
+    iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
           video: type === 'video' ? { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
@@ -444,7 +463,11 @@ const AppContent = () => {
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
           while (iceCandidateQueue.current.length > 0) { const cand = iceCandidateQueue.current.shift(); await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(()=>{}); }
        }
-    } catch(e) { endCallUI(); }
+     } catch(e) { 
+        console.error('WebRTC Setup Failed:', e);
+        alert('Call failed: Could not access camera or microphone. Please check permissions.');
+        endCallUI(); 
+     }
   };
 
 
