@@ -1,31 +1,29 @@
-
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ShieldAlert, X, Fingerprint, Lock, CheckCircle } from 'lucide-react';
+import { initDB } from '../lib/db';
 
 interface LockScreenProps {
   onUnlock: (pin: string) => void;
+  onReset: () => void;
 }
 
-export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
+export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => {
   const [display, setDisplay] = useState('');
   const [dots, setDots] = useState<boolean[]>(new Array(6).fill(false));
+  const [showRescue, setShowRescue] = useState(false);
+  const [rescueId, setRescueId] = useState('');
+  const [rescueError, setRescueError] = useState('');
 
   const handleKeyPress = (num: string) => {
     if (display.length < 6) {
       const newDisplay = display + num;
       setDisplay(newDisplay);
-      
       const newDots = [...dots];
       newDots[newDisplay.length - 1] = true;
       setDots(newDots);
-
-      if (newDisplay.length === 6) {
-        // Just provide feedback, don't auto-unlock to avoid race conditions with OK button
-      }
     }
   };
-
-
 
   const handleUnlockClick = () => {
     if (display.length === 6) {
@@ -35,30 +33,50 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     }
   };
 
+  const handleRescueReset = async () => {
+    try {
+      const db = await initDB();
+      const identity = await db.get('identity', 'me');
+      if (identity && identity.userId === rescueId.trim()) {
+        await db.clear('auth'); // ONLY clear the PIN store
+        onReset(); // This should trigger the app to show PinSetup again
+      } else {
+        setRescueError('Invalid Device ID. Ask your partner for your unique ID.');
+      }
+    } catch {
+      setRescueError('Verification failed. Try again.');
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-[#0c111d] flex flex-col items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="w-full max-w-xs py-4">
-        <div className="text-center mb-8">
-          <h1 className="text-lg font-medium text-white/40 tracking-wider mb-4">SecureCalc</h1>
-          <h2 className="text-xl font-semibold text-white mb-6">Enter Passcode</h2>
-          <div className="flex justify-center space-x-3 mb-2">
+    <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center p-4 z-50 overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-primary/10" />
+      
+      <div className="w-full max-w-xs py-4 relative z-10">
+        <div className="text-center mb-10">
+          <div className="w-16 h-16 bg-white/5 rounded-2xl mx-auto flex items-center justify-center mb-6 border border-white/10">
+            <Lock size={28} className="text-white/40" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">Enter Passcode</h1>
+          <p className="text-white/30 text-xs uppercase tracking-[3px] font-black">SecureLove Cloud</p>
+          
+          <div className="flex justify-center space-x-4 mt-8">
             {dots.map((active, i) => (
               <motion.div
                 key={i}
-                initial={{ scale: 1 }}
-                animate={{ scale: active ? 1.2 : 1 }}
-                className={`w-2.5 h-2.5 rounded-full border border-white/20 ${active ? 'bg-white' : 'bg-transparent'}`}
+                animate={{ scale: active ? 1.25 : 1, backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.1)' }}
+                className={`w-3.5 h-3.5 rounded-full border border-white/5`}
               />
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-x-3 gap-y-4">
+        <div className="grid grid-cols-3 gap-3">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <button
               key={num}
               onClick={() => handleKeyPress(num.toString())}
-              className="w-full aspect-square rounded-xl bg-white/5 border border-white/5 text-3xl font-light text-white flex items-center justify-center active:bg-white/10 active:scale-95 transition-all"
+              className="w-full aspect-square rounded-2xl bg-white/5 border border-white/10 text-3xl font-light text-white flex items-center justify-center active:bg-primary/20 transition-all"
             >
               {num}
             </button>
@@ -66,18 +84,64 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
           <div className="w-full aspect-square" />
           <button
             onClick={() => handleKeyPress('0')}
-            className="w-full aspect-square rounded-xl bg-white/5 border border-white/5 text-3xl font-light text-white flex items-center justify-center active:bg-white/10 active:scale-95 transition-all"
+            className="w-full aspect-square rounded-2xl bg-white/5 border border-white/10 text-3xl font-light text-white flex items-center justify-center active:bg-primary/20 transition-all"
           >
             0
           </button>
           <button
             onClick={handleUnlockClick}
-            className="w-full aspect-square rounded-xl bg-white/5 border border-white/5 text-xl font-medium text-white/50 flex items-center justify-center active:bg-white/10 active:scale-95 transition-all"
+            className="w-full aspect-square rounded-2xl bg-primary text-white text-lg font-black uppercase flex items-center justify-center active:scale-95 transition-all shadow-xl shadow-primary/20"
           >
             OK
           </button>
         </div>
+
+        <button 
+          onClick={() => setShowRescue(true)}
+          className="w-full mt-10 text-white/20 text-[10px] font-black uppercase tracking-[4px] hover:text-white/40 transition-colors"
+        >
+          Forgot Passcode?
+        </button>
       </div>
+
+      {/* EMERGENCY RESCUE MODAL */}
+      <AnimatePresence>
+        {showRescue && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6"
+          >
+            <div className="w-full max-w-sm bg-zinc-900 rounded-[32px] border border-white/10 p-8 shadow-2xl relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-primary to-blue-500" />
+               <button onClick={() => setShowRescue(false)} className="absolute top-4 right-4 text-white/30 hover:text-white"><X size={20} /></button>
+               
+               <div className="flex flex-col items-center text-center">
+                  <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6">
+                    <ShieldAlert size={28} className="text-red-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Emergency Access</h3>
+                  <p className="text-white/40 text-sm mb-8">To reset your PIN without losing data, you must provide your unique **Device ID**. 
+                  <br/><br/>
+                  <span className="text-primary font-semibold">Your partner can find this ID in their app settings.</span></p>
+
+                  <input 
+                    type="text" 
+                    placeholder="Enter Device ID (user_...)" 
+                    className="w-full bg-black border border-white/10 rounded-2xl px-5 py-4 text-white text-sm outline-none focus:border-primary mb-2"
+                    value={rescueId}
+                    onChange={e => { setRescueId(e.target.value); setRescueError(''); }}
+                  />
+                  {rescueError && <p className="text-red-400 text-[10px] font-bold uppercase mb-4">{rescueError}</p>}
+                  
+                  <button onClick={handleRescueReset} className="w-full btn-primary h-14 flex items-center justify-center space-x-2">
+                    <CheckCircle size={18} />
+                    <span>Verify & Reset PIN</span>
+                  </button>
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

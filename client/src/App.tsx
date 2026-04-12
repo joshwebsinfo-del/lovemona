@@ -357,7 +357,7 @@ const AppContent = () => {
 
   if (isLoading) return <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center"><div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /></div>;
   if (!appConfig) return <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />;
-  if (!isUnlocked) return <LockScreen onUnlock={handleUnlock} />;
+  if (!isUnlocked) return <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />;
   if (!isPaired && !isFakeMode && appConfig) return <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />;
 
   return (

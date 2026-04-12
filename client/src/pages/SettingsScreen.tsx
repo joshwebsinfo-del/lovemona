@@ -14,6 +14,8 @@ export const SettingsScreen: React.FC = () => {
   const [theme, setTheme] = useState('passionate');
   const [wallpaper, setWallpaper] = useState('');
   const [isClearing, setIsClearing] = useState(false);
+  const [myId, setMyId] = useState('');
+  const [partnerId, setPartnerId] = useState('');
 
   const themes = [
     { id: 'passionate', label: 'Passionate', color: 'bg-rose-500' },
@@ -48,6 +50,11 @@ export const SettingsScreen: React.FC = () => {
         setTheme(settings.theme || 'passionate');
         setWallpaper(settings.wallpaper || '');
       }
+
+      const identity = await db.get('identity', 'me');
+      if (identity) setMyId(identity.userId);
+      const partner = await db.get('partner', 'partner');
+      if (partner) setPartnerId(partner.userId);
     };
     loadSettings();
   }, []);
@@ -282,10 +289,54 @@ export const SettingsScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* DATA MANAGEMENT */}
+        {/* DEVICE SECURITY & RECOVERY */}
         <div className="space-y-4">
           <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
              <Shield size={12} />
+             <span>Device Security</span>
+          </label>
+          <div className="bg-white/5 rounded-[32px] p-6 border border-white/10 space-y-4">
+             <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px] uppercase font-black tracking-widest text-primary/60 px-1">
+                   <span>My Rescue ID</span>
+                   <span className="opacity-50">Private</span>
+                </div>
+                <div 
+                   onClick={() => {
+                      navigator.clipboard.writeText(myId);
+                      alert('Device ID copied to clipboard');
+                   }}
+                   className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white/60 text-[11px] font-mono break-all cursor-pointer hover:bg-black/60 transition-all border-dashed"
+                >
+                   {myId || 'Loading...'}
+                </div>
+                <p className="text-[10px] text-white/20 mt-1 px-1">Give this to your partner only if they lose their PIN.</p>
+             </div>
+
+             <div className="pt-2">
+                <div className="flex justify-between items-center text-[10px] uppercase font-black tracking-widest text-white/40 px-1">
+                   <span>Partner's Rescue ID</span>
+                </div>
+                <div 
+                  onClick={() => {
+                     if(partnerId) {
+                        navigator.clipboard.writeText(partnerId);
+                        alert('Partner ID copied');
+                     }
+                  }}
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white/60 text-[11px] font-mono break-all cursor-pointer hover:bg-black/60 transition-all"
+                >
+                   {partnerId || 'No Partner Paired'}
+                </div>
+                <p className="text-[10px] text-white/20 mt-1 px-1 italic">Use this to help your partner reset their PIN.</p>
+             </div>
+          </div>
+        </div>
+
+        {/* DATA MANAGEMENT */}
+        <div className="space-y-4">
+          <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
+             <Trash2 size={12} />
              <span>Privacy Ops</span>
           </label>
           <div className="bg-red-500/5 border border-red-500/10 rounded-[32px] p-6 space-y-4">
