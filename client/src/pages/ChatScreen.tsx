@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Navigation, Activity } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Activity } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
