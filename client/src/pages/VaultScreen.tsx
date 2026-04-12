@@ -38,10 +38,13 @@ export const VaultScreen: React.FC = () => {
         
         // Fetch all items owned by me in cloud
         const { data: cloud, error: fetchError } = await supabase.from('vault').select('*').eq('owner_id', identity.userId);
-        if (fetchError) throw fetchError;
+        if (fetchError) {
+          console.error("Vault Sync: FETCH FAILED!", fetchError.message, fetchError.code, fetchError.details);
+          throw fetchError;
+        }
 
+        console.log(`Vault Sync: Found ${cloud?.length || 0} cloud items for user ${identity.userId}`);
         if (cloud && cloud.length > 0) {
-          console.log(`Vault Sync: Found ${cloud.length} items in cloud.`);
           for (let i = 0; i < cloud.length; i++) {
             setSyncProgress(Math.round(((i + 1) / cloud.length) * 100));
             const ci = cloud[i];
@@ -155,16 +158,23 @@ export const VaultScreen: React.FC = () => {
                  });
                  const { encrypted, iv } = await encryptBuffer(sharedKey, arrayBuffer);
                  const storagePath = `vault/${identity.userId}/${newItem.id}_${file.name}`;
-                 await supabase.storage.from('vault').upload(storagePath, new Blob([encrypted], { type: 'application/octet-stream' }));
+                 const { error: uploadErr } = await supabase.storage.from('vault').upload(storagePath, new Blob([encrypted], { type: 'application/octet-stream' }));
+                 if (uploadErr) throw uploadErr;
                  dbData = `storage://${storagePath}::${bufferToBase64(iv.buffer as any)}`;
              }
 
              const enc = await encryptMessage(sharedKey, dbData);
-             await supabase.from('vault').insert([
-               { id: newItem.id + "_me", owner_id: identity.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp },
-               { id: newItem.id + "_partner", owner_id: partner.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp }
-             ]);
-         } catch(e) { console.error('Cloud Sync Error:', e); }
+              const { error: vaultInsertErr } = await supabase.from('vault').insert([
+                { id: newItem.id + "_me", owner_id: identity.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp },
+                { id: newItem.id + "_partner", owner_id: partner.userId, name: newItem.name, type: newItem.type, encrypted_data: enc.encrypted, iv: enc.iv, timestamp: newItem.timestamp }
+              ]);
+              if (vaultInsertErr) {
+                console.error('Vault Cloud Insert Error:', vaultInsertErr);
+                alert('Cloud sync error: ' + vaultInsertErr.message);
+              } else {
+                console.log('Vault: File synced to cloud for both partners!');
+              }
+          } catch(e) { console.error('Cloud Sync Error:', e); alert('Cloud sync exception: ' + (e as Error).message); }
       }
       await loadVault();
     } catch(e) {

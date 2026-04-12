@@ -60,17 +60,37 @@ BEGIN
     END IF;
 END $$;
 
--- 6. Disable RLS for peer-to-peer sync
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE partnerships DISABLE ROW LEVEL SECURITY;
-ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE vault DISABLE ROW LEVEL SECURITY;
+-- 6. GRANT full access to anon and authenticated roles
+-- This is the CRITICAL fix: DISABLE RLS alone does NOT work for the anon API key.
+-- Supabase JS client uses the anon role, which still needs explicit permissions.
+GRANT ALL ON users TO anon, authenticated;
+GRANT ALL ON partnerships TO anon, authenticated;
+GRANT ALL ON messages TO anon, authenticated;
+GRANT ALL ON vault TO anon, authenticated;
 
--- 7. Create the Storage Bucket
+-- 7. Enable RLS but add fully permissive policies for the anon role
+-- This ensures the Supabase client can read/write all rows freely.
+ALTER TABLE vault ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "vault_all_access" ON vault;
+CREATE POLICY "vault_all_access" ON vault FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "messages_all_access" ON messages;
+CREATE POLICY "messages_all_access" ON messages FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "users_all_access" ON users;
+CREATE POLICY "users_all_access" ON users FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE partnerships ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "partnerships_all_access" ON partnerships;
+CREATE POLICY "partnerships_all_access" ON partnerships FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. Create the Storage Bucket
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('vault', 'vault', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Storage Policy
+-- Storage Policy - allow all operations on the vault bucket
 DROP POLICY IF EXISTS "Public Access" ON storage.objects;
 CREATE POLICY "Public Access" ON storage.objects FOR ALL USING ( bucket_id = 'vault' );
