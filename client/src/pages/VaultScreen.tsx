@@ -481,18 +481,18 @@ export const VaultScreen: React.FC = () => {
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*" onChange={handleFileUpload} />
       <input type="file" ref={secretFileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
 
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 flex space-x-2 z-30">
+      {/* Action Buttons: Repositioned to bottom-right to avoid covering navigation */}
+      <div className="fixed bottom-32 right-6 flex flex-col space-y-4 z-30">
           <button 
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center space-x-2 px-6 py-3.5 bg-gradient-to-br from-primary to-orange-500 rounded-full text-white text-[15px] font-bold shadow-2xl shadow-primary/30 active:scale-95 transition-all"
+            className="w-14 h-14 bg-gradient-to-br from-primary to-orange-500 rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-primary/40 active:scale-95 transition-all text-xs flex-col font-bold"
           >
             {isUploading && !pendingSecretFile ? (
                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
                <>
-                 <Plus size={18} strokeWidth={2.5} />
-                 <span>Upload</span>
+                 <Plus size={24} strokeWidth={2.5} />
                </>
             )}
           </button>
@@ -500,10 +500,9 @@ export const VaultScreen: React.FC = () => {
           <button 
             onClick={() => secretFileInputRef.current?.click()}
             disabled={isUploading}
-            className="flex items-center space-x-2 px-6 py-3.5 bg-red-600 rounded-full text-white text-[15px] font-bold shadow-2xl shadow-red-500/30 active:scale-95 transition-all"
+            className="w-14 h-14 bg-red-600 rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-red-500/40 active:scale-95 transition-all"
           >
-             <Lock size={18} strokeWidth={2.5} />
-             <span>Secret Drop</span>
+             <Lock size={24} strokeWidth={2.5} />
           </button>
       </div>
 
