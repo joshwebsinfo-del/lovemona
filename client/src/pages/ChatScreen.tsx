@@ -560,14 +560,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     setShowLocationMenu(false);
     if (!navigator.geolocation) return alert('Location not supported by your browser');
     
-    // Clear previous state and show loader
+    // Clear previous state and show loader with status
     setIsProcessingMedia(true);
     
     const options = {
       enableHighAccuracy: true,
-      timeout: 10000,
+      timeout: 20000, // Increased timeout for better reliability
       maximumAge: 0
     };
+
+    console.log('📡 Starting Geolocation...');
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -579,7 +581,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           type: 'location', 
           lat, 
           lng, 
-          text: `📍 Live Check-In`, 
+          text: `📍 Live Check-In (${Math.round(durationHrs * 60)}m)`, 
           expiresAt 
         };
         
@@ -601,8 +603,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         console.error('❌ Geolocation Error:', err);
         let msg = 'Failed to get location.';
         if (err.code === 1) msg = 'Location access denied. Please allow location permissions in your browser settings.';
-        else if (err.code === 2) msg = 'Location unavailable. Try turning on GPS.';
-        else if (err.code === 3) msg = 'Location request timed out. Please try again.';
+        else if (err.code === 2) msg = 'Location signals are weak. Try moving near a window or outdoors.';
+        else if (err.code === 3) msg = 'Location request timed out. High-accuracy GPS failed.';
         alert(msg);
       },
       options
