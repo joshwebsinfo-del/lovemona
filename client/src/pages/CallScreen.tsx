@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, Video, Wand2, PhoneOff, Gamepad2, X } from 'lucide-react';
+import { Camera, Video, Wand2, PhoneOff, Gamepad2 } from 'lucide-react';
 import './CallScreen.css';
 
 interface CallScreenProps {
