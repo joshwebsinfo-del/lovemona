@@ -450,9 +450,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   }, [sharedKey, myUserId, partnerInfo.userId]);
 
   const sendSecurePayload = async (payload: ChatPayload, messageId?: string) => {
-    if (!sharedKey || !partnerInfo.userId) return;
+    if (!sharedKey) { console.warn('Cannot send: sharedKey is null'); return; }
+    if (!partnerInfo.userId) { console.warn('Cannot send: partnerId is null'); return; }
     const s = getSocket();
-    if (!s) return;
+    if (!s) { console.warn('Cannot send: socket is null'); return; }
 
     try {
       const payloadStr = JSON.stringify(payload);

@@ -92,7 +92,7 @@ const FakeCalculator = () => (
 // ──────────────────────────────────────────────
 const AppContent = () => {
   const [appConfig, setAppConfig] = useState<AuthConfig | null>(null);
-  const [isUnlocked, setIsUnlocked] = useState(true);
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [isFakeMode, setIsFakeMode] = useState(false);
   const [isPaired, setIsPaired] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -263,7 +263,15 @@ const AppContent = () => {
                    ...stream.getAudioTracks() // Mix my audio with their stream
                 ]);
                 callChunksRef.current = [];
-                const mr = new MediaRecorder(mixedStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+                
+                // Compatibility for different browsers (VP9 -> VP8 -> Default)
+                let selectedMime = 'video/webm;codecs=vp8,opus';
+                if (!(window as any).MediaRecorder || !(window as any).MediaRecorder.isTypeSupported || !MediaRecorder.isTypeSupported(selectedMime)) {
+                   selectedMime = 'video/mp4;codecs=avc1,mp4a.40.2';
+                }
+                if (selectedMime && !MediaRecorder.isTypeSupported(selectedMime)) selectedMime = ''; // browser default
+
+                const mr = new MediaRecorder(mixedStream, selectedMime ? { mimeType: selectedMime } : undefined);
                 mr.ondataavailable = ev => { if (ev.data.size > 0) callChunksRef.current.push(ev.data); };
                 mr.onstop = async () => {
                    if (callChunksRef.current.length === 0) return;
