@@ -141,6 +141,17 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notificationSound = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize notification sound & permissions
+  useEffect(() => {
+    notificationSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+    notificationSound.current.volume = 0.5;
+    
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
   
   // MediaRecorder Refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -400,6 +411,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           };
           setMessages(prev => [...prev, msg]);
           await db.put('messages', msg);
+
+          // ── NOTIFICATIONS & SOUNDS ──
+          if (data.senderId !== myUserId) {
+            notificationSound.current?.play().catch(() => {});
+            if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+            
+            if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
+              new Notification(partnerInfo.nick, {
+                body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`,
+                icon: partnerInfo.avatar || '/pwa-192x192.png',
+              });
+            }
+          }
           
           if (payload.type === 'media') {
              const vType = payload.mediaType?.startsWith('audio') ? 'voice' : (payload.mediaType?.startsWith('video') ? 'video' : 'photo');
