@@ -158,10 +158,22 @@ const AppContent = () => {
   }, []);
 
   // ── Visibility + Global call initiation ──
+  const [isBlurred, setIsBlurred] = useState(false);
+
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') { const s = getSocket(); if (s && !s.connected) s.connect(); }
+      if (document.visibilityState === 'visible') { 
+        setIsBlurred(false);
+        const s = getSocket(); 
+        if (s && !s.connected) s.connect(); 
+      } else {
+        setIsBlurred(true);
+      }
     };
+    
+    // Extra protection for app switcher
+    const handleBlur = () => setIsBlurred(true);
+    const handleFocus = () => setIsBlurred(false);
 
     const handleGlobalCallStart = (e: CustomEvent) => {
        const { type } = e.detail;
@@ -180,10 +192,14 @@ const AppContent = () => {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
     window.addEventListener('start-global-call', handleGlobalCallStart as any);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('start-global-call', handleGlobalCallStart as any);
     };
   }, [partner, sharedKey]);
@@ -578,7 +594,7 @@ const AppContent = () => {
   // RENDER: Normal app (no call)
   // ═══════════════════════════════════════════
   return (
-    <div className="h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative">
+    <div className={`h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative transition-all duration-300 ${isBlurred ? 'opacity-0 blur-2xl pointer-events-none scale-95' : 'opacity-100 blur-0 scale-100'}`}>
       {isLoading ? (
         <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
            <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />

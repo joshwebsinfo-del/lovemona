@@ -21,6 +21,18 @@
       radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
       radial-gradient(circle at 80% 70%, rgba(239, 68, 68, 0.05) 0%, transparent 40%),
       url("https://www.transparenttextures.com/patterns/stardust.png");
+    
+    /* Anti-Screenshot / Interaction Protection */
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-drag: none;
+  }
+  
+  /* Allow text selection only inside input fields */
+  input, textarea {
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
   }
 }
 

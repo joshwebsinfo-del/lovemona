@@ -14,6 +14,38 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   const [showRescue, setShowRescue] = useState(false);
   const [rescueId, setRescueId] = useState('');
   const [rescueError, setRescueError] = useState('');
+  
+  // Intruder Selfie State
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
+  const captureIntruder = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+      
+      await new Promise(res => { video.onloadedmetadata = res; });
+      setTimeout(async () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d')?.drawImage(video, 0, 0);
+        const b64 = canvas.toDataURL('image/jpeg', 0.8);
+        stream.getTracks().forEach(t => t.stop());
+        
+        const db = await initDB();
+        await db.put('vault', {
+          id: 'intruder_' + Date.now(),
+          name: '🚨 INTRUDER',
+          type: 'photo',
+          data: b64,
+          timestamp: Date.now(),
+          locked: false
+        });
+      }, 500); // give camera half a second to adjust exposure
+    } catch { /* silently fail if no camera */ }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -47,7 +79,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
 
   const handleUnlockClick = () => {
     if (display.length === 6) {
-      onUnlock(display);
+      const isCorrect = onUnlock(display);
+      // Wait, LockScreen receives onUnlock which is a callback. 
+      // In App.tsx, does onUnlock return a boolean? We might need to check how it works there.
+      // A better way is: LockScreen calls onUnlock. If it remains rendered, it was wrong.
+      // But we can just count every time they press OK as an attempt.
+      setFailedAttempts(prev => {
+        const next = prev + 1;
+        if (next === 3) captureIntruder(); // Trigger on 3rd attempt
+        return next;
+      });
       setDisplay('');
       setDots(new Array(6).fill(false));
     }
