@@ -6,7 +6,7 @@ interface LiveWallpaperProps {
   audioLevel?: number;
 }
 
-export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type, audioLevel = 0 }) => {
+export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type }) => {
   if (!type) return null;
 
   // --- NEBULA (CSS-only, no JS animations) ---
