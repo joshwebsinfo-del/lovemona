@@ -16,7 +16,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   const [rescueError, setRescueError] = useState('');
   
   // Intruder Selfie State
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [, setFailedAttempts] = useState(0);
 
   const captureIntruder = async () => {
     try {
@@ -79,7 +79,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
 
   const handleUnlockClick = () => {
     if (display.length === 6) {
-      const isCorrect = onUnlock(display);
+      onUnlock(display);
       // Wait, LockScreen receives onUnlock which is a callback. 
       // In App.tsx, does onUnlock return a boolean? We might need to check how it works there.
       // A better way is: LockScreen calls onUnlock. If it remains rendered, it was wrong.
