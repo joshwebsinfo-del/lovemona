@@ -81,6 +81,7 @@ VALUES ('vault', 'vault', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Give public access to the bucket for all users (required for the app's crypto-first sync)
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
 CREATE POLICY "Public Access" ON storage.objects FOR ALL USING ( bucket_id = 'vault' );
 
 
