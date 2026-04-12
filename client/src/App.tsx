@@ -115,6 +115,7 @@ const AppContent = () => {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const iceCandidateQueue = useRef<any[]>([]);
   const ringtoneSound = useRef<HTMLAudioElement | null>(null);
   const callDurationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -207,7 +208,7 @@ const AppContent = () => {
                   }
                   const answer = await pcRef.current.createAnswer();
                   let sdp = answer.sdp;
-                  if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
+                  if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
                   await pcRef.current.setLocalDescription({ ...answer, sdp });
                   const enc = await encryptMessage(sharedKey, JSON.stringify({type:'call:answer', sdp: pcRef.current.localDescription}));
                   getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
@@ -345,7 +346,7 @@ const AppContent = () => {
     iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 60, min: 30 } } : false, 
+          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 60 } } : false, 
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
        });
        localStreamRef.current = stream;
@@ -362,6 +363,7 @@ const AppContent = () => {
 
        pc.ontrack = (e) => { 
           if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; 
+          if (remoteAudioRef.current) remoteAudioRef.current.srcObject = e.streams[0]; 
 
           // Mixed Recording Logic (High Quality)
           if (!callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
@@ -413,7 +415,7 @@ const AppContent = () => {
        if (isInitiator) {
           const offer = await pc.createOffer();
           let sdp = offer.sdp;
-          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
+          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
           await pc.setLocalDescription({ ...offer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
@@ -421,7 +423,7 @@ const AppContent = () => {
           await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
           const answer = await pc.createAnswer();
           let sdp = answer.sdp;
-          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=5000000;x-google-min-bitrate=1500000;x-google-start-bitrate=2500000'); }
+          if (sdp) { sdp = sdp.replace(/a=fmtp:111 .*/, 'a=fmtp:111 minptime=10;useinbandfec=1;stereo=1;maxaveragebitrate=510000'); sdp = sdp.replace(/a=fmtp:96 .*/, 'a=fmtp:96 x-google-max-bitrate=8000000;x-google-min-bitrate=2500000;x-google-start-bitrate=4000000'); }
           await pc.setLocalDescription({ ...answer, sdp });
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:answer', sdp: pc.localDescription}));
           getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
@@ -525,29 +527,32 @@ const AppContent = () => {
     const pAvatar = partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'mona'}`;
 
     return (
-      <CallScreen
-        partnerName={pName}
-        avatarUrl={pAvatar}
-        callType={callType}
-        incoming={callIncoming}
-        connected={callConnected}
-        callDuration={callDuration}
-        remoteVideoRef={remoteVideoRef}
-        localVideoRef={localVideoRef}
-        localFilter={FILTERS[localFilterIndex]}
-        remoteFilter={remoteFilter}
-        reactions={reactions}
-        videoUpgradeRequested={videoUpgradeRequested}
-        onAnswer={handleAnswerCall}
-        onDecline={handleDeclineCall}
-        onEndCall={handleEndCall}
-        onToggleCamera={handleToggleCamera}
-        onChangeFilter={handleChangeFilter}
-        onSendReaction={handleSendReaction}
-        onUpgradeRequest={handleUpgradeRequest}
-        onUpgradeAccept={handleUpgradeAccept}
-        onUpgradeDecline={handleUpgradeDecline}
-      />
+      <>
+        <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+        <CallScreen
+          partnerName={pName}
+          avatarUrl={pAvatar}
+          callType={callType}
+          incoming={callIncoming}
+          connected={callConnected}
+          callDuration={callDuration}
+          remoteVideoRef={remoteVideoRef}
+          localVideoRef={localVideoRef}
+          localFilter={FILTERS[localFilterIndex]}
+          remoteFilter={remoteFilter}
+          reactions={reactions}
+          videoUpgradeRequested={videoUpgradeRequested}
+          onAnswer={handleAnswerCall}
+          onDecline={handleDeclineCall}
+          onEndCall={handleEndCall}
+          onToggleCamera={handleToggleCamera}
+          onChangeFilter={handleChangeFilter}
+          onSendReaction={handleSendReaction}
+          onUpgradeRequest={handleUpgradeRequest}
+          onUpgradeAccept={handleUpgradeAccept}
+          onUpgradeDecline={handleUpgradeDecline}
+        />
+      </>
     );
   }
 

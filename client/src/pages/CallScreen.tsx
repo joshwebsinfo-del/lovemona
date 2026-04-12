@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Camera, Video, Wand2, PhoneOff } from 'lucide-react';
 import './CallScreen.css';
 
@@ -20,11 +20,21 @@ interface CallScreenProps {
   onEndCall: () => void;
   onSendReaction: (emoji: string) => void;
   onToggleCamera: () => void;
-  onChangeFilter: () => void;
+  onChangeFilter: (filterIndex: number) => void;
   onUpgradeRequest: () => void;
   onUpgradeAccept: () => void;
   onUpgradeDecline: () => void;
 }
+
+const FILTER_OPTIONS = [
+  { name: 'Normal', value: 'none' },
+  { name: 'Noir', value: 'grayscale(100%)' },
+  { name: 'Vintage', value: 'sepia(80%)' },
+  { name: 'Vivid', value: 'saturate(200%)' },
+  { name: 'Neon', value: 'hue-rotate(90deg)' },
+  { name: 'Sharp', value: 'contrast(150%)' },
+  { name: 'Invert', value: 'invert(100%)' }
+];
 
 function formatCallTime(secs: number): string {
   const m = Math.floor(secs / 60);
@@ -55,9 +65,11 @@ export function CallScreen({
   onUpgradeAccept,
   onUpgradeDecline,
 }: CallScreenProps) {
+  const [showFilters, setShowFilters] = useState(false);
+
   useEffect(() => {
     document.body.classList.add('call-active');
-    return () => document.body.classList.remove('call-active');
+    return () => { document.body.classList.remove('call-active'); };
   }, []);
 
   const statusText = incoming ? 'Incoming Secure Line...' : connected ? `Live Call • ${formatCallTime(callDuration)}` : 'Connecting...';
@@ -70,9 +82,29 @@ export function CallScreen({
       {connected && callType === 'video' && (
         <div className="call-screen__header">
           <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><Camera size={20} /></button>
-          <button className="call-screen__icon-btn" onClick={onChangeFilter} aria-label="Filters"><Wand2 size={20} /></button>
+          <button className="call-screen__icon-btn" onClick={() => setShowFilters(!showFilters)} aria-label="Filters"><Wand2 size={20} /></button>
         </div>
       )}
+      
+      {/* Filter Selector Menu */}
+      {showFilters && connected && callType === 'video' && (
+         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto' }}>
+            {FILTER_OPTIONS.map((f, i) => (
+               <button 
+                  key={f.name} 
+                  onClick={() => { onChangeFilter(i); setShowFilters(false); }}
+                  style={{
+                     padding: '8px 16px', background: localFilter === f.value ? '#8b5cf6' : 'rgba(0,0,0,0.6)', 
+                     backdropFilter: 'blur(10px)', color: 'white', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.2)',
+                     whiteSpace: 'nowrap', fontWeight: 'bold', fontSize: '12px'
+                  }}
+               >
+                  {f.name}
+               </button>
+            ))}
+         </div>
+      )}
+
       {connected && callType === 'voice' && !videoUpgradeRequested && (
         <div className="call-screen__header" style={{ justifyContent: 'center' }}>
           <button className="call-screen__icon-btn" style={{ width: 'auto', padding: '0 20px', gap: '8px', borderRadius: '24px' }} onClick={onUpgradeRequest} aria-label="Request Video">
