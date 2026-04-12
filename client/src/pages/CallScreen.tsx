@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, Video, Wand2, PhoneOff, Gamepad2 } from 'lucide-react';
+import { Camera, Video, Wand2, PhoneOff, Gamepad2, X } from 'lucide-react';
 import './CallScreen.css';
 
 interface CallScreenProps {
@@ -29,7 +29,13 @@ interface CallScreenProps {
 }
 
 const GAME_REACTION = 'reaction';
+const GAME_STARE = 'soul_stare';
+const GAME_CATEGORIES = 'categories';
+const GAME_JIGSAW = 'jigsaw';
+
 const REACTION_EMOJIS = ['❤️', '😍', '🔥', '💋', '✨'];
+const CATEGORY_PROMPTS = ["Animals", "Movies", "Cities", "Fruits", "Brands", "Celebrities", "Colors", "Instruments", "Countries", "Food", "Hobbies", "Vehicles"];
+const ALPHABET = "ABCDEFGHIJKLMNOPRSTUVW";
 
 const FILTER_OPTIONS = [
   { name: 'Normal', value: 'none' },
@@ -77,35 +83,81 @@ export function CallScreen({
   
   const [activeGame, setActiveGame] = useState<string | null>(null);
   const [isGameHost, setIsGameHost] = useState(false);
+
+  // Reaction State
   const [rrTarget, setRrTarget] = useState<string | null>(null);
   const [rrScores, setRrScores] = useState({ me: 0, partner: 0 });
+
+  // Soul Stare State
+  const [stareTimer, setStareTimer] = useState(0);
+
+  // Categories State
+  const [catScore, setCatScore] = useState({ me: 0, partner: 0 });
+  const [catPrompt, setCatPrompt] = useState({ cat: '', letter: '' });
+
+  // Jigsaw State
+  const [jigImg, setJigImg] = useState<string | null>(null);
+  const [jigState, setJigState] = useState<(number | null)[]>([]);
 
   useEffect(() => {
     document.body.classList.add('call-active');
     return () => { document.body.classList.remove('call-active'); };
   }, []);
 
-  // ── Reaction Roulette Engine ──
+  // ── Unified Game Engine State Machine ──
   useEffect(() => {
     if (!lastIncomingGameEvent) return;
     const evt = lastIncomingGameEvent;
     
-    if (evt.action === 'start' && evt.game === GAME_REACTION) {
-       setActiveGame(GAME_REACTION);
-       setIsGameHost(false);
-       setRrScores({ me: 0, partner: 0 });
-       setRrTarget(null);
-    } else if (evt.action === 'new_target') {
-       setRrTarget(evt.emoji);
-    } else if (evt.action === 'scored') {
-       setRrScores(prev => ({ ...prev, partner: prev.partner + 1 }));
-       setRrTarget(null); 
-    } else if (evt.action === 'end') {
+    // Check Global End
+    if (evt.action === 'end') {
        setActiveGame(null);
        setRrTarget(null);
+       return;
+    }
+
+    if (evt.action === 'start') {
+       setActiveGame(evt.game);
+       setIsGameHost(false);
+       
+       if (evt.game === GAME_REACTION) {
+          setRrScores({ me: 0, partner: 0 });
+          setRrTarget(null);
+       } else if (evt.game === GAME_STARE) {
+          setStareTimer(0);
+       } else if (evt.game === GAME_CATEGORIES) {
+          setCatScore({ me: 0, partner: 0 });
+          setCatPrompt({ cat: evt.cat, letter: evt.letter });
+       } else if (evt.game === GAME_JIGSAW) {
+          setJigImg(evt.img);
+          setJigState(evt.state);
+       }
+       return;
+    }
+
+    // Reaction Logic
+    if (evt.action === 'new_target') setRrTarget(evt.emoji);
+    else if (evt.action === 'scored') {
+       setRrScores(prev => ({ ...prev, partner: prev.partner + 1 }));
+       setRrTarget(null); 
+    } 
+    // Stare Logic
+    else if (evt.action === 'stare_lost') {
+       alert('You Win! Your partner blinked or looked away!');
+       setActiveGame(null);
+    }
+    // Categories Logic
+    else if (evt.action === 'cat_buzz') {
+       setCatScore(prev => ({ ...prev, partner: prev.partner + 1 }));
+       setCatPrompt({ cat: evt.cat, letter: evt.letter });
+    }
+    // Jigsaw Logic
+    else if (evt.action === 'jig_move') {
+       setJigState(evt.state);
     }
   }, [lastIncomingGameEvent]);
 
+  // ── Reaction Game Host Tick ──
   useEffect(() => {
      let timer: any;
      if (activeGame === GAME_REACTION && isGameHost && !rrTarget) {
@@ -118,13 +170,76 @@ export function CallScreen({
      return () => clearTimeout(timer);
   }, [activeGame, isGameHost, rrTarget]);
 
-  const handleStartReactionGame = () => {
-     setActiveGame(GAME_REACTION);
+  // ── Stare Timer Tick ──
+  useEffect(() => {
+      let timer: any;
+      if (activeGame === GAME_STARE) {
+          timer = setInterval(() => setStareTimer(t => t + 1), 1000);
+      }
+      return () => clearInterval(timer);
+  }, [activeGame]);
+
+  const handleStartGame = (gameType: string) => {
+     setActiveGame(gameType);
      setIsGameHost(true);
-     setRrScores({ me: 0, partner: 0 });
-     setRrTarget(null);
      setShowGames(false);
-     onSendGameEvent({ action: 'start', game: GAME_REACTION });
+
+     if (gameType === GAME_REACTION) {
+        setRrScores({ me: 0, partner: 0 });
+        setRrTarget(null);
+        onSendGameEvent({ action: 'start', game: GAME_REACTION });
+     } else if (gameType === GAME_STARE) {
+        setStareTimer(0);
+        onSendGameEvent({ action: 'start', game: GAME_STARE });
+     } else if (gameType === GAME_CATEGORIES) {
+        const cat = CATEGORY_PROMPTS[Math.floor(Math.random() * CATEGORY_PROMPTS.length)];
+        const letter = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+        setCatScore({ me: 0, partner: 0 });
+        setCatPrompt({ cat, letter });
+        onSendGameEvent({ action: 'start', game: GAME_CATEGORIES, cat, letter });
+     } else if (gameType === GAME_JIGSAW) {
+        // Build Jigsaw
+        const video = remoteVideoRef.current || localVideoRef.current;
+        if (!video) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = 300; canvas.height = 300;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const size = Math.min(video.videoWidth, video.videoHeight);
+        const x = (video.videoWidth - size) / 2;
+        const y = (video.videoHeight - size) / 2;
+        ctx.drawImage(video, x, y, size, size, 0, 0, 300, 300);
+        
+        const b64 = canvas.toDataURL('image/jpeg', 0.5);
+        let state: (number|null)[] = [0,1,2,3,4,5,6,7,null];
+        let nullIdx = 8;
+        for(let i=0; i<40; i++) {
+            const moves = [];
+            if (nullIdx % 3 > 0) moves.push(nullIdx - 1);
+            if (nullIdx % 3 < 2) moves.push(nullIdx + 1);
+            if (nullIdx > 2) moves.push(nullIdx - 3);
+            if (nullIdx < 6) moves.push(nullIdx + 3);
+            const move = moves[Math.floor(Math.random() * moves.length)];
+            state[nullIdx] = state[move];
+            state[move] = null;
+            nullIdx = move;
+        }
+        
+        setJigState(state);
+        setJigImg(b64);
+        onSendGameEvent({ action: 'start', game: GAME_JIGSAW, img: b64, state });
+     }
+  };
+
+  const handleBuzzer = () => {
+      const myScore = catScore.me + 1;
+      setCatScore(prev => ({...prev, me: myScore}));
+      const c = CATEGORY_PROMPTS[Math.floor(Math.random() * CATEGORY_PROMPTS.length)];
+      const l = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+      setCatPrompt({ cat: c, letter: l });
+      onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l });
+      if (myScore >= 5) { alert('You won Categories Quick Fire!'); setActiveGame(null); onSendGameEvent({action:'end'}); }
   };
 
   const executeReact = (emoji: string) => {
@@ -151,7 +266,7 @@ export function CallScreen({
       <div className="call-screen__glow" />
 
       {/* Header Controls (Only when connected and in video) */}
-      {connected && callType === 'video' && (
+      {connected && callType === 'video' && !activeGame && (
         <div className="call-screen__header">
           <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
           <div style={{ display: 'flex', gap: '15px' }}>
@@ -162,24 +277,26 @@ export function CallScreen({
       )}
       
       {/* Game Selector Menu */}
-      {showGames && connected && callType === 'video' && (
-         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', justifyContent: 'center' }}>
-            <button 
-               onClick={handleStartReactionGame}
-               style={{
-                  padding: '12px 24px', background: 'rgba(239, 68, 68, 0.2)', 
-                  backdropFilter: 'blur(10px)', color: '#fca5a5', borderRadius: '16px', border: '1px solid rgba(239, 68, 68, 0.4)',
-                  fontWeight: '900', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px'
-               }}
-            >
-               Play: Reaction Roulette
+      {showGames && connected && callType === 'video' && !activeGame && (
+         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', justifyContent: 'flex-start', paddingBottom: '10px' }}>
+            <button onClick={() => handleStartGame(GAME_REACTION)} className="call-game-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+               Roulette
+            </button>
+            <button onClick={() => handleStartGame(GAME_STARE)} className="call-game-btn" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
+               Stare
+            </button>
+            <button onClick={() => handleStartGame(GAME_CATEGORIES)} className="call-game-btn" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#fde047', border: '1px solid rgba(234, 179, 8, 0.4)' }}>
+               Categories
+            </button>
+            <button onClick={() => handleStartGame(GAME_JIGSAW)} className="call-game-btn" style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#d8b4fe', border: '1px solid rgba(168, 85, 247, 0.4)' }}>
+               Jigsaw
             </button>
          </div>
       )}
       
       {/* Filter Selector Menu */}
-      {showFilters && connected && callType === 'video' && (
-         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto' }}>
+      {showFilters && connected && callType === 'video' && !activeGame && (
+         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px' }}>
             {FILTER_OPTIONS.map((f, i) => (
                <button 
                   key={f.name} 
@@ -256,10 +373,10 @@ export function CallScreen({
         <video ref={remoteVideoRef} autoPlay playsInline className="call-screen__video-remote" style={{ filter: remoteFilter !== 'none' ? remoteFilter : 'none' }} />
         <video ref={localVideoRef} autoPlay playsInline muted className="call-screen__video-local" style={{ filter: localFilter !== 'none' ? localFilter : 'none' }} />
         
-        {/* Game UI Layer */}
+        {/* GAME: REACTION ROULETTE */}
         {activeGame === GAME_REACTION && (
            <div style={{ position: 'absolute', top: '160px', left: 0, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 11 }}>
-              <div style={{ background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(0,0,0,0.6)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '14px', marginBottom: '20px', color:'white' }}>
                  You: {rrScores.me}  —  Them: {rrScores.partner}
               </div>
               <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -269,11 +386,62 @@ export function CallScreen({
                     <div style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.2)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                  )}
               </div>
-              {isGameHost && <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>End Game</button>}
+              <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>Quit Match</button>
            </div>
         )}
 
-        {connected && callType === 'video' && (
+        {/* GAME: SOUL STARE */}
+        {activeGame === GAME_STARE && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)' }}>
+                <h2 style={{ fontSize: '24px', letterSpacing: '4px', textTransform:'uppercase', color:'white', textShadow:'0 2px 10px black' }}>Soul Stare</h2>
+                <div style={{ fontSize: '80px', fontWeight: '900', margin: '40px 0', color: 'white', textShadow:'0 4px 20px black' }}>{formatCallTime(stareTimer)}</div>
+                <button onClick={() => { onSendGameEvent({ action: 'stare_lost' }); alert('You Lost! You broke eye contact!'); setActiveGame(null); }} style={{ padding: '20px 40px', background: '#ef4444', borderRadius: '30px', fontWeight: 'bold', color: 'white', fontSize:'18px' }}>I BLINKED / LOST</button>
+            </div>
+        )}
+
+        {/* GAME: CATEGORIES */}
+        {activeGame === GAME_CATEGORIES && (
+            <div style={{ position: 'absolute', top: '100px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 12 }}>
+                <div style={{ background: 'rgba(0,0,0,0.8)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: 'white' }}>You: {catScore.me}  —  Them: {catScore.partner}</div>
+                <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ fontSize: '40px', fontWeight: '900', background: '#eab308', color: 'black', width: '80px', height: '80px', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow:'0 10px 25px rgba(234,179,8,0.4)' }}>{catPrompt.letter}</div>
+                    <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', textShadow: '0 2px 10px black', textTransform: 'uppercase', letterSpacing: '2px' }}>{catPrompt.cat}</div>
+                </div>
+                <button onClick={handleBuzzer} style={{ width: '120px', height: '120px', background: '#ef4444', borderRadius: '50%', border: '8px solid #b91c1c', marginTop: '60px', fontSize: '20px', color: 'white', fontWeight: '900', boxShadow: '0 10px 40px rgba(239,68,68,0.5)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.9)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>BUZZER</button>
+                <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '40px', fontWeight: 'bold', fontSize:'14px' }}>Quit</button>
+            </div>
+        )}
+
+        {/* GAME: JIGSAW */}
+        {activeGame === GAME_JIGSAW && jigImg && (
+            <div style={{ position: 'absolute', top: '120px', width: '300px', height: '300px', left: '50%', transform: 'translateX(-50%)', background: '#111', border: '5px solid white', borderRadius: '10px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', zIndex: 50 }}>
+                {jigState.map((val, idx) => {
+                    if (val === null) return <div key={idx} style={{ background: 'transparent' }} />;
+                    const r = Math.floor(val / 3); const c = val % 3;
+                    const bgPosX = -(c * 100);
+                    const bgPosY = -(r * 100);
+                    return (
+                        <div key={idx} onClick={() => {
+                            const nullIdx = jigState.indexOf(null);
+                            const isLeftRight = Math.abs(nullIdx - idx) === 1 && Math.floor(nullIdx/3) === Math.floor(idx/3);
+                            const isUpDown = Math.abs(nullIdx - idx) === 3;
+                            if (isLeftRight || isUpDown) {
+                                const newState = [...jigState];
+                                newState[nullIdx] = val;
+                                newState[idx] = null;
+                                setJigState(newState);
+                                onSendGameEvent({ action: 'jig_move', state: newState });
+                                let won = true;
+                                for(let i=0; i<8; i++) if (newState[i] !== i) won = false;
+                                if(won) { alert('We Solved the Puzzle!'); setActiveGame(null); onSendGameEvent({action:'end'}); }
+                            }
+                        }} style={{ backgroundImage: `url(${jigImg})`, backgroundSize: '300px 300px', backgroundPosition: `${bgPosX}px ${bgPosY}px`, cursor: 'pointer', borderRadius: '4px' }} />
+                    );
+                })}
+            </div>
+        )}
+
+        {connected && callType === 'video' && !activeGame && (
           <div className="call-screen__reactions-bar">
              {REACTION_EMOJIS.map(emoji => (
                <button key={emoji} className="call-screen__react-btn" onClick={() => executeReact(emoji)}>{emoji}</button>
