@@ -65,3 +65,13 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE partnerships DISABLE ROW LEVEL SECURITY;
 ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE vault DISABLE ROW LEVEL SECURITY;
+
+-- 7. Create the Storage Bucket for Video Notes and Vault Media
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('vault', 'vault', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Give public access to the bucket for all users (required for the app's crypto-first sync)
+CREATE POLICY "Public Access" ON storage.objects FOR ALL USING ( bucket_id = 'vault' );
+
+
