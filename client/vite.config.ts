@@ -52,12 +52,19 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,mp3,webm}'],
+        navigateFallback: '/index.html',
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-cache' }
+            options: { cacheName: 'google-fonts-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 } }
+          },
+          {
+            urlPattern: /^https:\/\/assets\.mixkit\.co\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'media-assets-cache', expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           }
         ]
       }
