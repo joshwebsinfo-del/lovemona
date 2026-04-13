@@ -1028,41 +1028,39 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
         {fullScreenMap && (
-          <div className="fixed inset-0 z-[120] bg-black flex flex-col animate-in fade-in duration-300">
+          <div className="fixed inset-0 z-[120] bg-black flex flex-col">
             <div className="p-4 bg-[#0a0a0c] border-b border-white/5 flex justify-between items-center z-10">
                <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                     <MapPin className="text-primary" size={20} />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-sm">Live Satellite</h3>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                      <p className="text-green-400 text-[9px] uppercase font-black tracking-widest">Active Connection</p>
-                    </div>
+                    <h3 className="text-white font-bold text-sm">Satellite Hybrid</h3>
+                    <p className="text-green-400 text-[9px] uppercase font-black tracking-widest">Enhanced Detail View</p>
                   </div>
                </div>
-               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform"><X size={20} /></button>
+               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white active:scale-95"><X size={20} /></button>
             </div>
             
-            <div className="flex-1 bg-zinc-900 relative">
-               <LeafletMap lat={fullScreenMap.lat} lng={fullScreenMap.lng} />
+            <div className="flex-1 bg-black relative">
+               <iframe 
+                 src={`https://maps.google.com/maps?q=${fullScreenMap.lat},${fullScreenMap.lng}&t=h&z=19&output=embed`}
+                 className="absolute inset-0 w-full h-full border-0"
+                 allowFullScreen
+               />
             </div>
 
-            <div className="p-6 bg-[#0a0a0c] border-t border-white/5 flex flex-col space-y-3">
+            <div className="p-4 bg-[#0a0a0c] border-t border-white/5 flex justify-center">
                <button 
                   onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${fullScreenMap.lat},${fullScreenMap.lng}`, '_blank')}
-                  className="bg-primary hover:bg-primary/90 text-white font-black px-8 py-4 rounded-3xl text-xs uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(234,179,8,0.3)] active:scale-95 transition-all flex items-center justify-center space-x-3"
+                  className="bg-primary text-white font-black px-8 py-3.5 rounded-2xl text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
                >
-                  <span>🧭 Get Direct Directions</span>
+                  Get Directions
                </button>
-               <p className="text-[9px] text-white/20 text-center uppercase tracking-widest font-black">Powered by High-Res Satellite Imagery</p>
             </div>
           </div>
         )}
-      </AnimatePresence>
     </div>
   );
 };
@@ -1284,66 +1282,4 @@ const ChatInput = React.memo(({
     </div>
   </div>
 ));
-
-const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<any>(null);
-
-  useEffect(() => {
-    // Add small delay to ensure DOM is ready and container has dimensions
-    const timer = setTimeout(() => {
-      if (mapRef.current && !mapInstance.current) {
-        const L = (window as any).L;
-        if (!L) return;
-
-        try {
-          const map = L.map(mapRef.current, {
-            zoomControl: false,
-            attributionControl: false,
-            fadeAnimation: true,
-            zoomAnimation: true
-          }).setView([lat, lng], 17);
-
-          // Use Esri World Imagery for High-Res Satellite View
-          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19,
-            edgeBufferTiles: 1
-          }).addTo(map);
-
-          L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-          const icon = L.divIcon({
-            className: 'custom-map-marker',
-            html: `
-              <div class="relative flex items-center justify-center">
-                <div class="absolute w-10 h-10 bg-primary/30 rounded-full animate-ping"></div>
-                <div class="relative w-4 h-4 bg-primary border-2 border-white rounded-full shadow-2xl"></div>
-              </div>
-            `,
-            iconSize: [40, 40],
-            iconAnchor: [20, 20]
-          });
-
-          L.marker([lat, lng], { icon }).addTo(map);
-          mapInstance.current = map;
-          
-          // Force layout recalculation
-          setTimeout(() => map.invalidateSize(), 100);
-        } catch (e) {
-          console.error('Leaflet Init Error:', e);
-        }
-      }
-    }, 100);
-
-    return () => {
-      clearTimeout(timer);
-      if (mapInstance.current) {
-        mapInstance.current.remove();
-        mapInstance.current = null;
-      }
-    };
-  }, [lat, lng]);
-
-  return <div ref={mapRef} className="w-full h-full bg-zinc-900 border-none outline-none overflow-hidden" />;
-};
 
