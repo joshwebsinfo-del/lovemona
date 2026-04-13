@@ -7,7 +7,7 @@ import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
-import EmojiPicker, { Theme } from 'emoji-picker-react';
+
 import { LiveWallpaper } from '../components/LiveWallpaper';
 
 interface ChatScreenProps {
@@ -142,7 +142,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [showStickers, setShowStickers] = useState(false);
-  const [stickerTab, setStickerTab] = useState<'3d' | 'classic' | 'bots'>('3d');
+  const [stickerTab, setStickerTab] = useState<'3d' | 'bots'>('3d');
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1261,27 +1261,21 @@ const ChatInput = React.memo(({
          {showStickers && (
             <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[400px] backdrop-blur-3xl">
                <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
-                  {['3d', 'classic', 'bots'].map(tab => (
+                  {['3d', 'bots'].map(tab => (
                      <button key={tab} onClick={() => setStickerTab(tab as any)} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === tab ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>{tab === '3d' ? '3D Emojis' : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>
                   ))}
                </div>
                <div className="flex-1 overflow-y-auto no-scrollbar">
-                  {stickerTab === 'classic' ? (
-                     <div className="h-full">
-                        <EmojiPicker theme={Theme.DARK} width="100%" height="100%" onEmojiClick={(emoji) => handleSendSticker(emoji.emoji)} />
-                     </div>
-                  ) : (
-                     <div className="p-4 grid grid-cols-4 gap-4">
-                        {stickerTab === '3d' && ['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
-                           <div key={name} onClick={() => handleSendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
-                              <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" />
-                           </div>
-                        ))}
-                        {stickerTab === 'bots' && ['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
-                           <img key={seed} onClick={() => handleSendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1" />
-                        ))}
-                     </div>
-                  )}
+                  <div className="p-4 grid grid-cols-4 gap-4">
+                     {stickerTab === '3d' && ['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
+                        <div key={name} onClick={() => handleSendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
+                           <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" />
+                        </div>
+                     ))}
+                     {stickerTab === 'bots' && ['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
+                        <img key={seed} onClick={() => handleSendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1" />
+                     ))}
+                  </div>
                </div>
             </motion.div>
          )}
