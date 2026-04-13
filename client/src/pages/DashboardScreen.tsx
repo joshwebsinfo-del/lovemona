@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video } from 'lucide-react';
+import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video, Gamepad2, Edit3, Clock, Image as ImageIcon } from 'lucide-react';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
-import { importPublicKey, deriveSharedSecret, decryptMessage } from '../lib/crypto';
+import { importPublicKey, deriveSharedSecret, decryptMessage, encryptMessage } from '../lib/crypto';
 import { initSocket, getSocket } from '../lib/socket';
 import type { Partner, AuthConfig } from '../lib/types';
 
@@ -52,9 +52,21 @@ export const DashboardScreen = React.memo(() => {
   const [isTugging, setIsTugging] = useState(false);
   const [partnerMood, setPartnerMood] = useState<string>('default');
   const [syncStatus, setSyncStatus] = useState(99.1);
+  const [stickyNote, setStickyNote] = useState({ text: 'Good luck today ❤️', sender: 'me' });
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteInput, setNoteInput] = useState('');
+  const [vaultMemory, setVaultMemory] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number>(Date.now() + 86400000 * 5);
+  const [now, setNow] = useState(Date.now());
+  const [myIdentity, setMyIdentity] = useState<any>(null);
   
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+     const t = setInterval(() => setNow(Date.now()), 1000);
+     return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -65,11 +77,23 @@ export const DashboardScreen = React.memo(() => {
       const settings = await db.get('settings', 'main');
       
       if (p) setPartner(p);
-      if (auth) {
-        setMe(auth);
-      }
+      if (auth) setMe(auth);
+      if (identity) setMyIdentity(identity);
+
       if (settings) {
          setPartnerMood(settings.theme || 'default');
+      }
+      
+      const sticky = await db.get('settings', 'sticky_note');
+      if (sticky) setStickyNote(sticky.data);
+
+      const cd = await db.get('settings', 'countdown_target');
+      if (cd) setCountdown(cd.data);
+
+      const vaultItems = await db.getAll('vault') || [];
+      const localPhotos = vaultItems.filter((v: any) => v.type === 'photo' && v.data && !v.data.startsWith('storage://'));
+      if (localPhotos.length > 0) {
+          setVaultMemory(localPhotos[Math.floor(Math.random() * localPhotos.length)].data);
       }
 
       if (p && identity) {
@@ -112,6 +136,13 @@ export const DashboardScreen = React.memo(() => {
                    tugRef.current = setTimeout(() => setIsTugging(false), 5000);
                 } else if (payload.type === 'signal:mood') {
                    setPartnerMood(payload.mood);
+                } else if (payload.type === 'hub:note') {
+                   const data = { text: payload.text, sender: 'partner' };
+                   setStickyNote(data);
+                   const db2 = await initDB();
+                   await db2.put('settings', { id: 'sticky_note', data });
+                } else if (payload.type === 'hub:game_invite') {
+                   window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video', initGame: payload.game } }));
                 } else if (payload.type === 'text' || payload.type === 'media') {
                    setUnreadCount(c => c + 1);
                 }
@@ -139,7 +170,21 @@ export const DashboardScreen = React.memo(() => {
     const interval = setInterval(() => {
        setSyncStatus(s => s + (Math.random() > 0.5 ? 0.005 : -0.005));
     }, 4000);
-    return () => clearInterval(interval);
+
+    // Cycle vault memories
+    const memoryInterval = setInterval(async () => {
+       const db = await initDB();
+       const vaultItems = await db.getAll('vault') || [];
+       const localPhotos = vaultItems.filter((v: any) => v.type === 'photo' && v.data && !v.data.startsWith('storage://'));
+       if (localPhotos.length > 0) {
+           setVaultMemory(localPhotos[Math.floor(Math.random() * localPhotos.length)].data);
+       }
+    }, 15000);
+
+    return () => {
+       clearInterval(interval);
+       clearInterval(memoryInterval);
+    };
   }, []);
 
   const getMoodGradient = () => {
@@ -149,6 +194,68 @@ export const DashboardScreen = React.memo(() => {
         case 'playful': return 'from-fuchsia-500/20 via-zinc-950 to-black';
         default: return 'from-zinc-800 via-zinc-950 to-black';
      }
+  };
+
+  const saveStickyNote = async () => {
+     if (!noteInput.trim()) return setIsEditingNote(false);
+     setIsEditingNote(false);
+     const data = { text: noteInput, sender: 'me' };
+     setStickyNote(data);
+     const db = await initDB();
+     await db.put('settings', { id: 'sticky_note', data });
+     
+     const s = getSocket();
+     if (s && myIdentity && partner) {
+         const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
+         const payload = { type: 'hub:note', text: data.text };
+         const enc = await encryptMessage(key, JSON.stringify(payload));
+         s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+     }
+  };
+
+  const sendGameInvite = async () => {
+     window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }));
+     const s = getSocket();
+     if (s && myIdentity && partner) {
+         const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
+         const payload = { type: 'hub:game_invite', game: 'start' };
+         const enc = await encryptMessage(key, JSON.stringify(payload));
+         s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+     }
+  };
+
+  const setMood = async (m: string) => {
+      const db = await initDB();
+      const settings = (await db.get('settings', 'main')) || { id: 'main' };
+      settings.theme = m;
+      await db.put('settings', settings);
+      setPartnerMood(m);
+      
+      const s = getSocket();
+      if (s && myIdentity && partner) {
+          const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
+          const payload = { type: 'signal:mood', mood: m };
+          const enc = await encryptMessage(key, JSON.stringify(payload));
+          s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+      }
+  };
+
+  // Time remaining calc
+  const diff = Math.max(0, countdown - now);
+  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const m = Math.floor(diff / 1000 / 60) % 60;
+
+  const updateCountdown = async () => {
+      const dateStr = prompt('Enter a special date (YYYY-MM-DD):', new Date(countdown).toISOString().split('T')[0]);
+      if (dateStr) {
+          const newDate = new Date(dateStr).getTime();
+          if (!isNaN(newDate)) {
+              setCountdown(newDate);
+              const db = await initDB();
+              await db.put('settings', { id: 'countdown_target', data: newDate });
+          }
+      }
   };
 
   return (
@@ -231,32 +338,58 @@ export const DashboardScreen = React.memo(() => {
       </div>
 
       {/* ACTION TRAY - PREMIUM CARDS */}
-      <div className="pb-32 px-6 flex flex-col space-y-4 z-20">
+      <div className="pb-32 px-6 flex flex-col space-y-4 z-20 flex-1 overflow-y-auto no-scrollbar pt-4">
          
+         {/* STICKY NOTE WIDGET */}
+         <div className="w-full bg-[#1a1a1c]/80 backdrop-blur-xl rounded-[28px] p-5 shadow-xl border border-white/5 relative group">
+            <div className="absolute top-4 right-4 flex space-x-2 opacity-50 group-hover:opacity-100 transition-opacity">
+               <button onClick={() => { setNoteInput(stickyNote.text); setIsEditingNote(true); }} className="p-1 hover:text-primary transition-colors"><Edit3 size={14}/></button>
+            </div>
+            
+            <p className="text-[10px] font-black uppercase tracking-[2px] text-white/30 mb-2 flex items-center">
+               <Heart size={10} className="mr-1.5 text-primary" /> {stickyNote.sender === 'me' ? 'My Note' : 'Note from ' + (partner?.nick || 'Partner')}
+            </p>
+
+            {isEditingNote ? (
+               <div className="flex flex-col space-y-2 relative z-50">
+                  <textarea 
+                     value={noteInput} onChange={e => setNoteInput(e.target.value)}
+                     className="bg-black/50 text-white rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-20 resize-none font-medium italic"
+                     autoFocus
+                  />
+                  <div className="flex justify-end space-x-2">
+                     <button onClick={() => setIsEditingNote(false)} className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold active:scale-95 text-white/60">Cancel</button>
+                     <button onClick={saveStickyNote} className="px-3 py-1 bg-primary rounded-lg text-xs font-bold text-white active:scale-95 shadow-lg shadow-primary/30">Save Note</button>
+                  </div>
+               </div>
+            ) : (
+               <p className="text-[15px] font-medium text-white/90 italic leading-relaxed hand-written-style">
+                  "{stickyNote.text}"
+               </p>
+            )}
+         </div>
+
          <div className="grid grid-cols-2 gap-4">
+            {/* OUR WORLD */}
             <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                onClick={() => navigate('/chat')}
-               className="col-span-2 h-24 rounded-[32px] bg-white text-black flex items-center justify-between px-8 shadow-[0_20px_40px_rgba(0,0,0,0.3)] relative overflow-hidden group"
+               className="col-span-2 h-20 rounded-[28px] bg-white text-black flex items-center justify-between px-8 shadow-[0_20px_40px_rgba(0,0,0,0.3)] relative overflow-hidden group"
             >
-               <div className="absolute right-[-10%] top-[-10%] p-5 opacity-[0.05] group-hover:rotate-12 group-hover:scale-110 transition-all duration-500">
+               <div className="absolute right-[-5%] top-[-50%] p-5 opacity-[0.03] group-hover:rotate-12 group-hover:scale-110 transition-all duration-500">
                   <MessageCircle size={120} />
                </div>
                <div className="flex flex-col text-left relative z-10">
-                  <span className="text-2xl font-black tracking-tighter leading-none mb-1 text-black">OUR WORLD</span>
-                  <span className="text-[10px] font-bold uppercase tracking-[2px] opacity-40">Private connection</span>
+                  <span className="text-xl font-black tracking-tighter leading-none mb-1 text-black">OUR WORLD</span>
+                  <span className="text-[9px] font-bold uppercase tracking-[2px] opacity-40">Private Connection</span>
                </div>
                <div className="relative z-10">
-                  <div className="w-12 h-12 bg-black rounded-2xl flex items-center justify-center text-white shadow-xl group-hover:bg-primary transition-colors">
-                     <MessageCircle size={22} />
+                  <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white shadow-xl group-hover:bg-primary transition-colors">
+                     <MessageCircle size={18} />
                   </div>
                   <AnimatePresence>
                     {unreadCount > 0 && (
-                       <motion.div 
-                         initial={{ scale: 0 }} animate={{ scale: 1 }}
-                         className="absolute -top-2 -right-2 bg-primary text-white w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black border-[3px] border-white shadow-lg"
-                       >
+                       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -top-2 -right-2 bg-primary text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-lg">
                           {unreadCount}
                        </motion.div>
                     )}
@@ -264,77 +397,106 @@ export const DashboardScreen = React.memo(() => {
                </div>
             </motion.button>
 
-            {/* CALL QUICK ACTIONS */}
+            {/* CALLS */}
             <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'voice' } }))}
-               className="h-24 col-span-1 rounded-[32px] bg-sky-500 text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group"
+               className="h-20 col-span-1 rounded-[24px] bg-sky-500/90 text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group relative overflow-hidden backdrop-blur-md"
             >
-               <Phone size={28} fill="currentColor" className="mb-2 group-hover:scale-110 transition-transform" />
-               <span className="text-[10px] font-black uppercase tracking-wider">Voice</span>
+               <Phone size={24} fill="currentColor" className="mb-1.5 group-hover:scale-110 transition-transform opacity-90" />
+               <span className="text-[9px] font-black uppercase tracking-wider">Voice</span>
             </motion.button>
             <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }))}
-               className="h-24 col-span-1 rounded-[32px] bg-primary text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group"
+               className="h-20 col-span-1 rounded-[24px] bg-primary text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group relative overflow-hidden"
             >
-               <Video size={28} fill="currentColor" className="mb-2 group-hover:scale-110 transition-transform" />
-               <span className="text-[10px] font-black uppercase tracking-wider">Video</span>
+               <Video size={24} fill="currentColor" className="mb-1.5 group-hover:scale-110 transition-transform opacity-90" />
+               <span className="text-[9px] font-black uppercase tracking-wider">Video</span>
             </motion.button>
 
+            {/* VAULT POLAROID */}
             <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                onClick={() => navigate('/vault')}
-               className="h-32 rounded-[32px] bg-[#1a1a1c] border border-white/5 flex flex-col items-start justify-between p-6 shadow-xl relative overflow-hidden group"
+               className="h-32 col-span-1 rounded-[24px] bg-[#1a1a1c] border border-white/10 flex flex-col items-start justify-between p-4 shadow-xl relative overflow-hidden group p-0"
             >
-               <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-primary group-hover:bg-primary/20 transition-colors">
-                  <Lock size={20} />
-               </div>
-               <div className="text-left">
-                  <h3 className="text-white font-black text-[13px] tracking-widest uppercase">Vault</h3>
-                  <p className="text-white/30 text-[9px] uppercase font-bold tracking-wider">Secured</p>
-               </div>
-               <div className="absolute right-[-5%] bottom-[-5%] opacity-[0.02] group-hover:scale-110 transition-transform">
-                  <Lock size={60} />
+               {vaultMemory ? (
+                 <div className="absolute inset-0">
+                    <img src={vaultMemory} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" alt="Vault Memory" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1c] via-[#1a1a1c]/20 to-transparent" />
+                 </div>
+               ) : (
+                 <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                    <ImageIcon size={40} />
+                 </div>
+               )}
+               <div className="relative z-10 p-4 h-full flex flex-col justify-between w-full">
+                  <div className="w-7 h-7 bg-white/10 backdrop-blur-md rounded-lg flex items-center justify-center text-white border border-white/20">
+                     <Lock size={14} />
+                  </div>
+                  <div className="text-left mt-auto">
+                     <h3 className="text-white font-black text-[12px] tracking-widest uppercase shadow-black drop-shadow-md">Vault</h3>
+                     <p className="text-white/80 text-[8px] uppercase font-black tracking-wider shadow-black drop-shadow-md">{vaultMemory ? 'Memory' : 'Secured'}</p>
+                  </div>
                </div>
             </motion.button>
 
+            {/* COUNTDOWN WIDGET */}
             <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+               onClick={updateCountdown}
+               className="h-32 col-span-1 rounded-[24px] bg-white/5 border border-white/10 flex flex-col items-center justify-center shadow-xl relative overflow-hidden group"
+            >
+               <div className="absolute -top-6 -right-6 opacity-[0.03] group-hover:rotate-[30deg] transition-transform duration-700">
+                  <Clock size={100} />
+               </div>
+               <div className="flex flex-col items-center">
+                  <span className="text-2xl font-black text-white px-2 tracking-tighter drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">{d}d {h}h {m}m</span>
+                  <span className="text-[10px] text-primary/80 font-black uppercase tracking-[2px] mt-1">Anniversary</span>
+               </div>
+            </motion.button>
+
+            {/* QUICK GAMES PORTAL */}
+            <motion.button 
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+               onClick={sendGameInvite}
+               className="h-16 col-span-1 rounded-[20px] bg-purple-600/20 border border-purple-500/30 flex items-center justify-center space-x-2 shadow-xl hover:bg-purple-600/30 transition-colors"
+            >
+               <Gamepad2 size={16} className="text-purple-400" />
+               <span className="text-[10px] font-black text-purple-100 uppercase tracking-widest">Instant Game</span>
+            </motion.button>
+
+            {/* LOVE TAP */}
+            <motion.button 
+               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
                onClick={() => {
                   getSocket()?.emit('message:send', { to: partner?.userId, encrypted: 'tug', iv: 'tug', senderId: 'me' });
                   if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
                }}
-               className={`h-32 rounded-[32px] border flex flex-col items-start justify-between p-6 shadow-xl relative overflow-hidden transition-all duration-500 ${isTugging ? 'bg-primary border-primary' : 'bg-[#1a1a1c] border-white/5'}`}
+               className={`h-16 col-span-1 rounded-[20px] border flex items-center justify-center space-x-2 shadow-xl transition-all duration-500 ${isTugging ? 'bg-primary border-primary flex-row-reverse space-x-reverse' : 'bg-white/5 border-white/10'}`}
             >
-               <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isTugging ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary'}`}>
-                  <Heart size={20} className={isTugging ? 'animate-ping' : ''} />
-               </div>
-               <div className="text-left">
-                  <h3 className={`font-black text-[13px] tracking-widest uppercase ${isTugging ? 'text-white' : 'text-white'}`}>
-                    {isTugging ? 'Being Loved' : 'Love Tap'}
-                  </h3>
-                  <p className={`text-[9px] uppercase font-bold tracking-wider ${isTugging ? 'text-white/60' : 'text-white/30'}`}>Presence</p>
-               </div>
+               <Heart size={16} className={isTugging ? 'text-white animate-ping' : 'text-primary opacity-60'} />
+               <span className={`text-[10px] uppercase font-black tracking-widest ${isTugging ? 'text-white' : 'text-white/60'}`}>Love Tap</span>
             </motion.button>
          </div>
 
-         {/* MOOD DOTS */}
-         <div className="flex justify-center space-x-4 pt-4 opacity-50">
-            {['default', 'passionate', 'calm', 'playful'].map(m => (
-               <div 
-                  key={m}
-                  className={`w-1.5 h-1.5 rounded-full transition-all duration-700 ${partnerMood === m ? 'scale-150 shadow-lg' : 'opacity-20'} ${
-                     m === 'default' ? 'bg-white' : 
-                     m === 'passionate' ? 'bg-rose-500 shadow-rose-500/50' :
-                     m === 'calm' ? 'bg-sky-500 shadow-sky-500/50' : 'bg-fuchsia-500 shadow-fuchsia-500/50'
-                  }`}
-               />
-            ))}
+         {/* INTERACTIVE MOOD DOTS */}
+         <div className="flex flex-col items-center justify-center pt-6 pb-2">
+            <span className="text-[8px] uppercase font-black text-white/20 tracking-[4px] mb-3">Broadcast Your Mood</span>
+            <div className="flex justify-center space-x-6">
+               {['default', 'passionate', 'calm', 'playful'].map(m => (
+                  <button 
+                     key={m}
+                     onClick={() => setMood(m)}
+                     className={`w-3 h-3 rounded-full transition-all duration-300 ${partnerMood === m ? 'scale-150 shadow-[0_0_15px_rgba(255,255,255,0.2)] ring-2 ring-offset-2 ring-offset-[#050505] ring-white/20' : 'opacity-40 hover:opacity-100 hover:scale-125'} ${
+                        m === 'default' ? 'bg-zinc-400' : 
+                        m === 'passionate' ? 'bg-rose-500 shadow-rose-500/50' :
+                        m === 'calm' ? 'bg-sky-500 shadow-sky-500/50' : 'bg-fuchsia-500 shadow-fuchsia-500/50'
+                     }`}
+                  />
+               ))}
+            </div>
          </div>
 
       </div>

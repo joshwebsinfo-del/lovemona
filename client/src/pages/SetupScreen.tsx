@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import jsQR from 'jsqr';
 import { initSocket } from '../lib/socket';
@@ -282,12 +282,19 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0c] safe-top safe-bottom p-6 overflow-hidden">
+    <div className="flex flex-col h-full bg-[#0a0a0c] safe-top safe-bottom p-6 overflow-hidden relative">
+      {/* GLOWING BACKDROP */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+      </div>
+
       <AnimatePresence mode="wait">
         {mode === 'decision' && (
-          <motion.div key="decision" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex flex-col h-full items-center justify-center text-center space-y-8">
-            <div className="w-24 h-24 bg-primary/10 rounded-[32px] flex items-center justify-center border border-primary/20 shadow-2xl shadow-primary/20">
-              <ShieldCheck size={48} className="text-primary" />
+          <motion.div key="decision" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="flex flex-col h-full items-center justify-center text-center space-y-8 relative z-10">
+            <div className="w-24 h-24 bg-primary/10 rounded-[32px] flex items-center justify-center border border-primary/20 shadow-2xl shadow-primary/20 relative group">
+              <div className="absolute inset-0 bg-primary/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+              <ShieldCheck size={48} className="text-primary relative z-10" />
             </div>
             
             <div className="space-y-3">
@@ -298,27 +305,72 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
             </div>
 
             <div className="w-full space-y-4 pt-4">
-              <button onClick={() => handleModeChange('show')} className="w-full h-16 bg-white text-black rounded-[24px] font-black text-lg shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-95 transition-all flex items-center justify-center space-x-3">
+              <button 
+                onClick={() => { if(navigator.vibrate) navigator.vibrate(10); handleModeChange('show'); }} 
+                className="w-full h-16 bg-white text-black rounded-[24px] font-black text-lg shadow-[0_0_20px_rgba(255,255,255,0.1)] active:scale-95 transition-all flex items-center justify-center space-x-3"
+              >
                 <QrCode size={24} />
                 <span>Show My QR</span>
               </button>
-              <button onClick={() => handleModeChange('scan')} className="w-full h-16 bg-zinc-900 text-white rounded-[24px] font-black text-lg border border-white/10 hover:bg-zinc-800 active:scale-95 transition-all flex items-center justify-center space-x-3">
+              <button 
+                onClick={() => { if(navigator.vibrate) navigator.vibrate(10); handleModeChange('scan'); }} 
+                className="w-full h-16 bg-zinc-900 text-white rounded-[24px] font-black text-lg border border-white/10 hover:bg-zinc-800 active:scale-95 transition-all flex items-center justify-center space-x-3"
+              >
                 <Camera size={24} className="text-primary" />
                 <span>Scan Partner's</span>
               </button>
-              <button onClick={() => handleModeChange('manual')} className="w-full h-14 bg-white/5 text-white/60 rounded-[20px] font-bold text-sm border border-white/5 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center space-x-2">
-                <span>Pair via Partner ID</span>
-              </button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => { if(navigator.vibrate) navigator.vibrate(5); handleModeChange('manual'); }} 
+                  className="h-14 bg-white/5 text-white/60 rounded-[20px] font-bold text-xs border border-white/5 hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center space-x-2"
+                >
+                  <Zap size={16} />
+                  <span>Manual ID</span>
+                </button>
+                <button 
+                  onClick={async () => {
+                    if(navigator.vibrate) navigator.vibrate(20);
+                    try {
+                      await navigator.share({
+                        title: 'SecureLove Link',
+                        text: `Establish a secure connection with me on SecureLove. My ID: ${myId}`,
+                        url: window.location.href
+                      });
+                    } catch {
+                      navigator.clipboard.writeText(myId);
+                      alert('ID copied to clipboard!');
+                    }
+                  }} 
+                  className="h-14 bg-primary/10 text-primary rounded-[20px] font-bold text-xs border border-primary/20 hover:bg-primary/20 active:scale-95 transition-all flex items-center justify-center space-x-2"
+                >
+                  <Share2 size={16} />
+                  <span>Invite Partner</span>
+                </button>
+              </div>
               
               <div className="pt-4 flex flex-col items-center">
-                 <span className="text-[10px] font-black uppercase tracking-[2px] text-white/20 mb-2">My Secure ID</span>
+                 <span className="text-[10px] font-black uppercase tracking-[2px] text-white/20 mb-2">My Secure Device Fingerprint</span>
                  <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 flex items-center space-x-3">
                     <span className="text-xs font-mono text-primary/80">{myId}</span>
-                    <button 
-                      onClick={() => { navigator.clipboard.writeText(myId); }}
-                      className="text-[10px] font-bold text-white/40 hover:text-white uppercase tracking-wider"
-                    >Copy</button>
                  </div>
+              </div>
+
+              {/* FEATURE CAROUSEL */}
+              <div className="pt-8 w-full">
+                <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2">
+                  {[
+                    { icon: <Shield size={16}/>, title: 'E2E Encryption', desc: 'True privacy' },
+                    { icon: <Lock size={16}/>, title: 'Secret Vault', desc: 'Secure memories' },
+                    { icon: <Heart size={16}/>, title: 'Mood Sync', desc: 'Feel together' }
+                  ].map((feat, i) => (
+                    <div key={i} className="flex-shrink-0 w-32 bg-white/5 rounded-2xl p-3 border border-white/5 text-left">
+                       <div className="text-primary mb-2">{feat.icon}</div>
+                       <div className="text-[10px] font-black text-white uppercase tracking-wider">{feat.title}</div>
+                       <div className="text-[8px] text-white/30 font-bold uppercase">{feat.desc}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="pt-8 flex flex-col items-center">
