@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2 } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Smile } from 'lucide-react';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -31,6 +31,7 @@ interface ChatPayload {
   lat?: number;
   lng?: number;
   expiresAt?: number;
+  replyTo?: { id: string; text: string };
 }
 
 const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAudioAnalysis }: { 
@@ -123,7 +124,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [partnerInfo, setPartnerInfo] = useState<{ userId: string; nick: string; avatar?: string }>({ userId: '', nick: 'Partner ❤️' });
   const [showMenu, setShowMenu] = useState(false);
   const [isBlurred, setIsBlurred] = useState(false); // Shoulder surfing protection
-  const lastTapRef = useRef<{ id: string, time: number }>({ id: '', time: 0 });
   const [partnerOnline, setPartnerOnline] = useState(false);
   const partnerIdRef = useRef('');
   
@@ -136,6 +136,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [isVideoRecording, setIsVideoRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState('');
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [showStickers, setShowStickers] = useState(false);
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -525,32 +528,42 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   };
 
   const handleMessageTap = async (msgId: string) => {
-    const now = Date.now();
-    const last = lastTapRef.current;
-    if (last.id === msgId && (now - last.time) < 400) {
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reaction: '❤️' } : m));
+    if (selectedMessageId === msgId) {
+        setSelectedMessageId(null);
+    } else {
+        setSelectedMessageId(msgId);
+    }
+  };
+
+  const sendReaction = async (msgId: string, emoji: string) => {
+      setSelectedMessageId(null);
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, reaction: emoji } : m));
       const db = await initDB();
       const msg = await db.get('messages', msgId);
-      if (msg) await db.put('messages', { ...msg, reaction: '❤️' });
+      if (msg) await db.put('messages', { ...msg, reaction: emoji });
       
-      const payload = { type: 'reaction', messageId: msgId, reaction: '❤️' };
+      const payload: ChatPayload = { type: 'reaction', messageId: msgId, reaction: emoji };
       const s = getSocket();
       if (s && sharedKey) {
          const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
          s.emit('message:send', { to: partnerInfo.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myUserId });
       }
-      lastTapRef.current = { id: '', time: 0 };
-    } else {
-      lastTapRef.current = { id: msgId, time: now };
-    }
   };
 
   const handleSendText = async () => {
     if (!inputValue.trim()) return;
     const txt = inputValue;
     setInputValue('');
+    const currentReply = replyingTo;
+    setReplyingTo(null);
 
     const payload: ChatPayload = { type: 'text', text: txt };
+    if (currentReply) {
+       try {
+           const rp = JSON.parse(currentReply.text);
+           payload.replyTo = { id: currentReply.id, text: rp.text || (rp.type === 'media' ? 'Media File' : 'Location') };
+       } catch {}
+    }
     const msgId = Date.now().toString();
     
     const msg: Message = {
@@ -567,6 +580,25 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     await db.put('messages', msg);
 
     await sendSecurePayload(payload, msgId);
+  };
+
+  const sendSticker = async (url: string) => {
+      setShowStickers(false);
+      const payload: ChatPayload = { type: 'media', text: 'Sticker', mediaType: 'image/sticker', mediaData: url };
+      if (replyingTo) {
+          try {
+             const rp = JSON.parse(replyingTo.text);
+             payload.replyTo = { id: replyingTo.id, text: rp.text || 'Media' };
+          } catch {}
+          setReplyingTo(null);
+      }
+      const msgId = Date.now().toString();
+      const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+      setMessages(prev => [...prev, msg]);
+      scrollToBottom();
+      const db = await initDB();
+      await db.put('messages', msg);
+      await sendSecurePayload(payload, msgId);
   };
 
   // ── SEND LOCATION (one-tap) ──
@@ -1091,7 +1123,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
           return (
                <div
                 key={msg.id}
-                className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full ${isNew ? 'animate-fade-in' : ''}`}
+                id={`msg-${msg.id}`}
+                className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full ${isNew ? 'animate-fade-in' : ''} ${selectedMessageId === msg.id ? 'z-50 relative' : ''}`}
               >
                 <div
                   onClick={() => handleMessageTap(msg.id)}
@@ -1099,10 +1132,34 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                     isMe
                       ? 'bg-gradient-sender text-white ' + (showTail ? 'rounded-2xl rounded-br-sm' : 'rounded-2xl')
                       : 'bg-gradient-receiver border border-white/5 text-white/90 ' + (showTail ? 'rounded-2xl rounded-bl-sm' : 'rounded-2xl')
-                  } ${isBlurred ? 'blur-md hover:blur-none active:blur-none transition-all duration-300' : ''}`}
+                  } ${isBlurred ? 'blur-md hover:blur-none active:blur-none transition-all duration-300' : ''} ${selectedMessageId === msg.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-[#0a0a0c]' : ''}`}
                   style={{ userSelect: 'none' }}
                 >
-                  {renderMessageContent(msg.text)}
+                  {selectedMessageId === msg.id && (
+                     <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} flex bg-zinc-800 rounded-full shadow-2xl px-3 py-1 space-x-3 z-50 animate-fade-in`}>
+                        {['❤️', '😂', '😮', '😢', '🔥'].map(emoji => (
+                           <button key={emoji} onClick={(e) => { e.stopPropagation(); sendReaction(msg.id, emoji); }} className="text-xl hover:scale-125 transition-transform active:scale-90">{emoji}</button>
+                        ))}
+                        <div className="w-[1px] h-6 bg-white/20 mx-1" />
+                        <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setSelectedMessageId(null); }} className="text-[10px] font-black text-primary uppercase tracking-widest px-2 active:scale-95">Reply</button>
+                     </div>
+                  )}
+                  {(() => {
+                     try {
+                        const pl = JSON.parse(msg.text);
+                        return (
+                           <div className="flex flex-col">
+                              {pl.replyTo && (
+                                 <div className="mb-2 pl-2 border-l-2 border-white/30 bg-black/10 rounded overflow-hidden p-1.5 opacity-80 cursor-pointer hover:opacity-100" onClick={(e) => { e.stopPropagation(); const el = document.getElementById(`msg-${pl.replyTo.id}`); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }}>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary mb-0.5">Replying to</div>
+                                    <div className="truncate w-full max-w-[200px] text-xs italic">{pl.replyTo.text}</div>
+                                 </div>
+                              )}
+                              {renderMessageContent(msg.text)}
+                           </div>
+                        );
+                     } catch { return renderMessageContent(msg.text); }
+                  })()}
                 
                 {msg.reaction && (
                   <div className={`absolute -bottom-3 ${isMe ? '-left-2' : '-right-2'} text-xl bg-[#0a0a0c] border border-white/10 rounded-full px-1.5 py-0.5 shadow-2xl animate-fade-in`}>
@@ -1139,9 +1196,37 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       </div>
 
       {/* ── BOTTOM INPUT BAR ── */}
-      <div className="fixed bottom-0 w-full p-4 pb-12 z-20 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c] to-transparent pt-8">
-        <div className="flex items-end space-x-2">
+      <div className="fixed bottom-0 w-full p-4 pb-12 z-20 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c] to-transparent pt-12">
+        <div className="flex flex-col space-y-2 relative">
           
+          <AnimatePresence>
+             {replyingTo && (
+                <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, scale: 0.95}} className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-white/80 mx-2 shadow-xl">
+                   <div className="flex flex-col overflow-hidden">
+                      <span className="text-[10px] text-primary font-black uppercase tracking-widest">Replying</span>
+                      <span className="text-xs truncate max-w-[200px] italic">
+                         {(() => { try { const p = JSON.parse(replyingTo.text); return p.text || (p.type==='media'?'Media File':'Message'); } catch { return 'Message'; }})()}
+                      </span>
+                   </div>
+                   <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded-full"><X size={16}/></button>
+                </motion.div>
+             )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+             {showStickers && (
+                <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c]/95 border border-white/10 rounded-3xl shadow-2xl p-4 w-full z-50 h-56 overflow-y-auto grid grid-cols-4 gap-3 backdrop-blur-3xl">
+                   {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin'].map(seed => (
+                      <img key={seed} 
+                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
+                           src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
+                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
+                      />
+                   ))}
+                </motion.div>
+             )}
+          </AnimatePresence>
+
           {/* Integrated Input Pill */}
           <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
             {isProcessingMedia && (
@@ -1168,6 +1253,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                    <button onClick={startVideoNote} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
                       <Video size={22} />
                    </button>
+                    <button onClick={() => setShowStickers(!showStickers)} className={`p-2 transition-colors rounded-full active:scale-90 flex-shrink-0 ${showStickers ? 'text-primary bg-primary/20' : 'text-white/30 hover:text-white'}`}>
+                       <Smile size={22} />
+                    </button>
                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
                    
                    <input
