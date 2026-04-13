@@ -128,6 +128,7 @@ const AppContent = () => {
   const callChunksRef = useRef<Blob[]>([]);
 
   const location = useLocation();
+  const navigate = useNavigate();
 
   // ── Init ringtone ──
   useEffect(() => {
