@@ -1215,14 +1215,35 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 
           <AnimatePresence>
              {showStickers && (
-                <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c]/95 border border-white/10 rounded-3xl shadow-2xl p-4 w-full z-50 h-56 overflow-y-auto grid grid-cols-4 gap-3 backdrop-blur-3xl">
-                   {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin'].map(seed => (
-                      <img key={seed} 
-                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
-                           src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
-                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
-                      />
-                   ))}
+                <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[350px] backdrop-blur-3xl">
+                   <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
+                      <button className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-primary rounded-xl text-white">All Emojis</button>
+                      <button className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-white/5 rounded-xl text-white/40">Custom</button>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-4 no-scrollbar">
+                      {/* Premium 3D Styled Emojis */}
+                      {['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
+                         <div key={name} onClick={() => sendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
+                            <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" onError={(e) => (e.currentTarget.parentElement!.style.display = 'none')} />
+                         </div>
+                      ))}
+                      {/* Classic Bots */}
+                      {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
+                         <img key={seed} 
+                              onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
+                              src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
+                              className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
+                         />
+                      ))}
+                      {/* Expanded Pack */}
+                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                         <img key={n} 
+                              onClick={() => sendSticker(`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`)} 
+                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`} 
+                              className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
+                         />
+                      ))}
+                   </div>
                 </motion.div>
              )}
           </AnimatePresence>
