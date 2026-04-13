@@ -143,8 +143,21 @@ const AppContent = () => {
     const load = async () => {
       try {
         const db = await initDB();
-        const [config, p, identity] = await Promise.all([ db.get('auth', 'pins'), db.get('partner', 'partner'), db.get('identity', 'me') ]);
         if (config) setAppConfig(config);
+        
+        // Session Persistence: Check if we have a valid recent unlock
+        const session = localStorage.getItem('lock_session');
+        if (session) {
+           try {
+              const { timestamp, mode } = JSON.parse(session);
+              const oneWeek = 7 * 24 * 60 * 60 * 1000;
+              if (Date.now() - timestamp < oneWeek && mode === 'real') {
+                 setIsUnlocked(true);
+                 setIsFakeMode(false);
+              }
+           } catch { localStorage.removeItem('lock_session'); }
+        }
+
         if (p) {
           setPartner(p);
           setIsPaired(true);
@@ -648,7 +661,18 @@ const AppContent = () => {
   const handleUnlock = (pin: string) => {
     if (!appConfig) return;
     navigator.mediaDevices?.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
-    if (pin === appConfig.realPin) { setIsUnlocked(true); setIsFakeMode(false); } else if (appConfig.fakePin && pin === appConfig.fakePin) { setIsUnlocked(true); setIsFakeMode(true); }
+    
+    if (pin === appConfig.realPin) { 
+       setIsUnlocked(true); 
+       setIsFakeMode(false); 
+       // Persist real session for 7 days
+       localStorage.setItem('lock_session', JSON.stringify({ timestamp: Date.now(), mode: 'real' }));
+    } else if (appConfig.fakePin && pin === appConfig.fakePin) { 
+       setIsUnlocked(true); 
+       setIsFakeMode(true); 
+       // Do NOT persist fake mode for security/stealth
+       localStorage.removeItem('lock_session');
+    }
   };
 
   // ═══════════════════════════════════════════

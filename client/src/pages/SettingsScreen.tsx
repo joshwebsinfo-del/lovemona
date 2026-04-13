@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check } from 'lucide-react';
+import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -177,6 +177,11 @@ export const SettingsScreen: React.FC = () => {
     } finally {
        setIsClearing(false);
     }
+  };
+
+  const lockAppManually = () => {
+    localStorage.removeItem('lock_session');
+    window.location.href = '/'; // Hard reload to clear App state and show LockScreen
   };
 
   return (
@@ -357,6 +362,32 @@ export const SettingsScreen: React.FC = () => {
                className="w-full h-14 bg-red-500 text-white font-black rounded-[20px] shadow-lg shadow-red-500/20 active:scale-[0.98] transition-all flex items-center justify-center"
              >
                 {isClearing ? 'Clearing Everywhere...' : 'CLEAR ALL CHATS'}
+             </button>
+          </div>
+        </div>
+
+        {/* LOCK SESSION */}
+        <div className="space-y-4">
+          <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
+             <Lock size={12} />
+             <span>Session Control</span>
+          </label>
+          <div className="bg-white/5 border border-white/10 rounded-[32px] p-6 space-y-4">
+             <div className="flex items-start space-x-4">
+                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white/40 mt-1">
+                   <Lock size={20} />
+                </div>
+                <div className="flex-1">
+                   <h4 className="text-white font-bold text-[15px]">Manual Lock</h4>
+                   <p className="text-white/30 text-xs">End your persistent session and require a PIN on next open.</p>
+                </div>
+             </div>
+             <button 
+               onClick={lockAppManually}
+               className="w-full h-14 bg-zinc-800 text-white font-black rounded-[20px] border border-white/10 active:scale-[0.98] transition-all flex items-center justify-center space-x-2"
+             >
+                <Lock size={18} />
+                <span>LOCK APP NOW</span>
              </button>
           </div>
         </div>
