@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { generateKeyPair, exportPublicKey } from '../lib/crypto';
 import type { Partner, AuthConfig } from '../lib/types';
 import type { Socket } from 'socket.io-client';
+import { useNotifications } from '../components/NotificationProvider';
 
 interface SetupScreenProps {
   onPair: (partner: Partner) => void;
@@ -17,6 +18,7 @@ interface SetupScreenProps {
 }
 
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
+  const { showNotification } = useNotifications();
   const [mode, setMode] = useState<'decision' | 'show' | 'scan' | 'manual'>('decision');
   const [myId, setMyId] = useState<string>('');
   const [publicKey, setPublicKey] = useState<string>('');
@@ -339,7 +341,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                       });
                     } catch {
                       navigator.clipboard.writeText(myId);
-                      alert('ID copied to clipboard!');
+                      showNotification({ title: 'Discovery ID', message: 'Identifier copied to clipboard. Share with partner!', type: 'success' });
                     }
                   }} 
                   className="h-14 bg-primary/10 text-primary rounded-[20px] font-bold text-xs border border-primary/20 hover:bg-primary/20 active:scale-95 transition-all flex items-center justify-center space-x-2"

@@ -301,12 +301,16 @@ const AppContent = () => {
           }
           
           // Global Push Notification for Chat Messages
-          else if (payload.type === 'whisper' || !payload.type) {
+          else if (['text', 'media', 'location', 'whisper'].includes(payload.type) || !payload.type) {
              const currentPath = window.location.pathname;
              if (currentPath !== '/chat') {
+                let displayMsg = payload.text || 'Sent you a whisper';
+                if (payload.type === 'media') displayMsg = 'Shared a private memory 📸';
+                if (payload.type === 'location') displayMsg = 'Shared their live location 📍';
+
                 showNotification({
                    title: partner?.nick || 'Partner',
-                   message: payload.text || 'Sent you a whisper',
+                   message: displayMsg,
                    type: 'message',
                    avatar: partner?.avatar,
                    action: () => window.dispatchEvent(new CustomEvent('nav-to-chat'))
@@ -520,7 +524,7 @@ const AppContent = () => {
        }
      } catch(e) { 
         console.error('WebRTC Setup Failed:', e);
-        alert('Call failed: Could not access camera or microphone.');
+        showNotification({ title: 'Call Error', message: 'Could not access camera or microphone.', type: 'alert' });
         endCallUI(); 
      }
   };
@@ -577,8 +581,7 @@ const AppContent = () => {
     if (sharedKey && partner?.userId) {
        encryptMessage(sharedKey, JSON.stringify({type: 'call:upgrade_request'})).then(enc => getSocket()?.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' }));
     }
-    // Show local feedback
-    alert("Request sent to partner!");
+    showNotification({ title: 'Ring sent', message: `Paging ${partner?.nick || 'partner'}...`, type: 'success' });
   };
 
   const handleUpgradeAccept = async () => {

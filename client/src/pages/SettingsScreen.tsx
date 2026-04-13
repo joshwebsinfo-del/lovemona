@@ -6,8 +6,10 @@ import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, encryptMessage } from '../lib/crypto';
 import { getSocket } from '../lib/socket';
+import { useNotifications } from '../components/NotificationProvider';
 
 export const SettingsScreen: React.FC = () => {
+  const { showNotification } = useNotifications();
   const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -168,10 +170,10 @@ export const SettingsScreen: React.FC = () => {
           
           // 2. Clear locally
           await db.clear('messages');
-          alert('Chat history cleared permanently.');
+          showNotification({ title: 'Privacy Ops', message: 'Chat history cleared permanently across all devices.', type: 'success' });
        }
     } catch {
-       alert('Failed to clear some data.');
+       showNotification({ title: 'Error', message: 'Failed to clear some cloud data.', type: 'alert' });
     } finally {
        setIsClearing(false);
     }
@@ -304,7 +306,7 @@ export const SettingsScreen: React.FC = () => {
                 <div 
                    onClick={() => {
                       navigator.clipboard.writeText(myId);
-                      alert('Device ID copied to clipboard');
+                      showNotification({ title: 'Rescue ID', message: 'Device ID copied. Keep this safe!', type: 'success' });
                    }}
                    className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white/60 text-[11px] font-mono break-all cursor-pointer hover:bg-black/60 transition-all border-dashed"
                 >
@@ -321,7 +323,7 @@ export const SettingsScreen: React.FC = () => {
                   onClick={() => {
                      if(partnerId) {
                         navigator.clipboard.writeText(partnerId);
-                        alert('Partner ID copied');
+                        showNotification({ title: 'Rescue ID', message: "Partner's ID copied. Ready to help!", type: 'success' });
                      }
                   }}
                   className="w-full bg-black/40 border border-white/10 rounded-2xl p-4 text-white/60 text-[11px] font-mono break-all cursor-pointer hover:bg-black/60 transition-all"
