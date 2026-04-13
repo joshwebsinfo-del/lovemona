@@ -52,7 +52,8 @@ export const DashboardScreen = React.memo(() => {
   const [isTugging, setIsTugging] = useState(false);
   const [partnerMood, setPartnerMood] = useState<string>('default');
   const [syncStatus, setSyncStatus] = useState(99.1);
-  const [stickyNote, setStickyNote] = useState({ text: 'Good luck today ❤️', sender: 'me' });
+  const [myNote, setMyNote] = useState('Type a note...');
+  const [partnerNote, setPartnerNote] = useState('Partner is typing...');
   const [isEditingNote, setIsEditingNote] = useState(false);
   const [noteInput, setNoteInput] = useState('');
   const [vaultMemory, setVaultMemory] = useState<string | null>(null);
@@ -85,8 +86,10 @@ export const DashboardScreen = React.memo(() => {
          setPartnerMood(settings.theme || 'default');
       }
       
-      const sticky = await db.get('settings', 'sticky_note');
-      if (sticky) setStickyNote(sticky.data);
+      const mySticky = await db.get('settings', 'sticky_note_me');
+      if (mySticky) setMyNote(mySticky.data);
+      const partnerSticky = await db.get('settings', 'sticky_note_partner');
+      if (partnerSticky) setPartnerNote(partnerSticky.data);
 
       const cd = await db.get('settings', 'countdown_target');
       if (cd) setCountdown(cd.data);
@@ -139,19 +142,14 @@ export const DashboardScreen = React.memo(() => {
                 } else if (payload.type === 'signal:mood') {
                    setPartnerMood(payload.mood);
                 } else if (payload.type === 'hub:game_invite') {
-                   window.dispatchEvent(new CustomEvent('start-global-call', { 
-                      detail: { 
-                        type: 'game', 
-                        isGameMode: true, 
-                        gameType: payload.game || 'categories' 
-                      } 
-                   }));
-                } else if (payload.type === 'hub:note') {
-                   const data = { text: payload.text, sender: 'partner' };
-                   setStickyNote(data);
-                   const db2 = await initDB();
-                   await db2.put('settings', { id: 'sticky_note', data });
-                } else if (payload.type === 'text' || payload.type === 'media') {
+                    window.dispatchEvent(new CustomEvent('incoming-game-invite', { 
+                       detail: { type: 'game', isGameMode: true, gameType: payload.game || 'categories' } 
+                    }));
+                 } else if (payload.type === 'hub:note') {
+                    setPartnerNote(payload.text);
+                    const db2 = await initDB();
+                    await db2.put('settings', { id: 'sticky_note_partner', data: payload.text });
+                 } else if (payload.type === 'text' || payload.type === 'media') {
                    setUnreadCount(c => c + 1);
                 }
              } catch { /* ignored */ }
@@ -175,9 +173,10 @@ export const DashboardScreen = React.memo(() => {
                      const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
                      const data = JSON.parse(dec);
                      if (row.type === 'note') {
-                        setStickyNote(data);
+                        if (row.owner_id === identity.userId) setMyNote(data.text);
+                        else setPartnerNote(data.text);
                         const db2 = await initDB();
-                        await db2.put('settings', { id: 'sticky_note', data });
+                        await db2.put('settings', { id: row.owner_id === identity.userId ? 'sticky_note_me' : 'sticky_note_partner', data: data.text });
                      } else if (row.type === 'mood') {
                         setPartnerMood(data.mood);
                      } else if (row.type === 'countdown') {
@@ -207,8 +206,9 @@ export const DashboardScreen = React.memo(() => {
                           const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
                           const parsed = JSON.parse(dec);
                           if (row.type === 'note') {
-                             setStickyNote(parsed);
-                             await db.put('settings', { id: 'sticky_note', data: parsed });
+                             if (row.owner_id === identity.userId) setMyNote(parsed.text);
+                             else setPartnerNote(parsed.text);
+                             await db.put('settings', { id: row.owner_id === identity.userId ? 'sticky_note_me' : 'sticky_note_partner', data: parsed.text });
                           } else if (row.type === 'mood' && row.owner_id === p.userId) {
                              setPartnerMood(parsed.mood);
                           } else if (row.type === 'countdown') {
@@ -265,14 +265,13 @@ export const DashboardScreen = React.memo(() => {
   const saveStickyNote = async () => {
      if (!noteInput.trim()) return setIsEditingNote(false);
      setIsEditingNote(false);
-     const data = { text: noteInput, sender: 'me' };
-     setStickyNote(data);
+     setMyNote(noteInput);
      const db = await initDB();
-     await db.put('settings', { id: 'sticky_note', data });
+     await db.put('settings', { id: 'sticky_note_me', data: noteInput });
      
      const s = getSocket();
      if (s && myIdentity && partner && sharedKey) {
-          const payload = { type: 'hub:note', text: data.text };
+          const payload = { type: 'hub:note', text: noteInput };
           const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
           s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
 
@@ -440,36 +439,45 @@ export const DashboardScreen = React.memo(() => {
       {/* ACTION TRAY - PREMIUM CARDS */}
       <div className="pb-32 px-6 flex flex-col space-y-4 z-20 flex-1 overflow-y-auto no-scrollbar pt-4">
          
-         {/* STICKY NOTE WIDGET */}
-         <div className="w-full bg-[#1a1a1c]/80 backdrop-blur-xl rounded-[28px] p-5 shadow-xl border border-white/5 relative group">
-            <div className="absolute top-4 right-4 flex space-x-2 opacity-50 group-hover:opacity-100 transition-opacity">
-               <button onClick={() => { setNoteInput(stickyNote.text); setIsEditingNote(true); }} className="p-1 hover:text-primary transition-colors"><Edit3 size={14}/></button>
+                  {/* STICKY NOTES BOARD */}
+         <div className="grid grid-cols-2 gap-3 w-full relative z-20 mb-2">
+            {/* My Note */}
+            <div 
+              className="bg-yellow-200/90 text-zinc-900 p-4 rounded-sm shadow-lg transform -rotate-1 hover:rotate-0 transition-transform cursor-pointer relative min-h-[140px] flex flex-col justify-between"
+              onClick={() => { setIsEditingNote(true); setNoteInput(myNote); }}
+            >
+               <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 bg-zinc-400/20 rounded-full blur-sm" />
+               <div className="absolute top-2 right-2 opacity-20"><Edit3 size={14} /></div>
+               <p className="font-handwriting text-[15px] leading-snug break-words">{myNote}</p>
+               <p className="text-[9px] mt-2 opacity-40 font-black uppercase tracking-widest text-right">— Me</p>
             </div>
-            
-            <p className="text-[10px] font-black uppercase tracking-[2px] text-white/30 mb-2 flex items-center">
-               <Heart size={10} className="mr-1.5 text-primary" /> {stickyNote.sender === 'me' ? 'My Note' : 'Note from ' + (partner?.nick || 'Partner')}
-            </p>
 
-            {isEditingNote ? (
-               <div className="flex flex-col space-y-2 relative z-50">
-                  <textarea 
-                     value={noteInput} onChange={e => setNoteInput(e.target.value)}
-                     className="bg-black/50 text-white rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-20 resize-none font-medium italic"
-                     autoFocus
-                  />
-                  <div className="flex justify-end space-x-2">
-                     <button onClick={() => setIsEditingNote(false)} className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold active:scale-95 text-white/60">Cancel</button>
-                     <button onClick={saveStickyNote} className="px-3 py-1 bg-primary rounded-lg text-xs font-bold text-white active:scale-95 shadow-lg shadow-primary/30">Save Note</button>
-                  </div>
-               </div>
-            ) : (
-               <p className="text-[15px] font-medium text-white/90 italic leading-relaxed hand-written-style">
-                  "{stickyNote.text}"
-               </p>
-            )}
+            {/* Partner Note */}
+            <div 
+              className="bg-sky-200/90 text-zinc-900 p-4 rounded-sm shadow-lg transform rotate-2 hover:rotate-0 transition-transform relative min-h-[140px] flex flex-col justify-between"
+            >
+               <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 bg-zinc-400/20 rounded-full blur-sm" />
+               <p className="font-handwriting text-[15px] leading-snug break-words">{partnerNote}</p>
+               <p className="text-[9px] mt-2 opacity-40 font-black uppercase tracking-widest text-right truncate">— {partner?.nick || 'Partner'}</p>
+            </div>
          </div>
 
-         <div className="grid grid-cols-2 gap-4">
+         {isEditingNote && (
+            <div className="flex flex-col space-y-2 relative z-50 mb-4 bg-zinc-900 p-4 rounded-2xl border border-white/10">
+               <textarea 
+                  value={noteInput} onChange={e => setNoteInput(e.target.value)}
+                  className="bg-black/50 text-white rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary h-20 resize-none font-medium italic"
+                  autoFocus
+                  placeholder="Tell your partner something..."
+               />
+               <div className="flex justify-end space-x-2">
+                  <button onClick={() => setIsEditingNote(false)} className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold active:scale-95 text-white/60">Cancel</button>
+                  <button onClick={saveStickyNote} className="px-3 py-1 bg-primary rounded-lg text-xs font-bold text-white active:scale-95 shadow-lg shadow-primary/30">Save Note</button>
+               </div>
+            </div>
+         )}
+
+<div className="grid grid-cols-2 gap-4">
             {/* OUR WORLD */}
             <motion.button 
                whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}

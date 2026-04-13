@@ -191,16 +191,27 @@ const AppContent = () => {
        setupWebRTC(isGameMode ? 'game' : (type || 'video'), true, undefined, 'user');
     };
 
+    const handleIncomingGameInvite = (e: CustomEvent) => {
+       const { type } = e.detail;
+       setCallActive(true);
+       setCallType(type);
+       setCallIncoming(true);
+       setCallConnected(false);
+       setCallPendingSdp(null);
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('start-global-call', handleGlobalCallStart as any);
+    window.addEventListener('incoming-game-invite', handleIncomingGameInvite as any);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('start-global-call', handleGlobalCallStart as any);
+      window.removeEventListener('incoming-game-invite', handleIncomingGameInvite as any);
     };
   }, [partner, sharedKey]);
 
