@@ -143,6 +143,7 @@ const AppContent = () => {
     const load = async () => {
       try {
         const db = await initDB();
+        const [config, p, identity] = await Promise.all([ db.get('auth', 'pins'), db.get('partner', 'partner'), db.get('identity', 'me') ]);
         if (config) setAppConfig(config);
         
         // Session Persistence: Check if we have a valid recent unlock
