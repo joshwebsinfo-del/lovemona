@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check, Lock } from 'lucide-react';
+import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check, Lock, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -389,6 +389,52 @@ export const SettingsScreen: React.FC = () => {
                 <Lock size={18} />
                 <span>LOCK APP NOW</span>
              </button>
+          </div>
+        </div>
+
+        {/* NOTIFICATION CONTROL */}
+        <div className="space-y-4">
+          <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
+             <Bell size={12} />
+             <span>Notification Control</span>
+          </label>
+          <div className="bg-white/5 rounded-[32px] p-6 border border-white/10 space-y-4">
+             <div className="flex items-start space-x-4">
+                <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary mt-1">
+                   <Bell size={20} />
+                 </div>
+                <div className="flex-1">
+                   <h4 className="text-white font-bold text-[15px]">Push Notifications</h4>
+                   <p className="text-white/30 text-xs">Stay synchronized in your private world with background alerts.</p>
+                </div>
+             </div>
+             
+             {!isPushSupported ? (
+               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-red-500 text-center">
+                  Push Not Supported on this Browser
+               </div>
+             ) : (
+               <div className="grid grid-cols-2 gap-3">
+                 <button 
+                   onClick={() => {
+                     if (myId) subscribeToPush(myId);
+                     else showNotification({ title: 'System', message: 'Identity not loaded.', type: 'alert' });
+                   }}
+                   className="h-14 bg-white/5 text-white/80 font-black rounded-[20px] border border-white/10 active:scale-[0.98] transition-all flex items-center justify-center text-xs uppercase tracking-widest"
+                 >
+                   Set Permission
+                 </button>
+                 <button 
+                   onClick={() => {
+                     if (myId) sendTestPush(myId);
+                     else showNotification({ title: 'System', message: 'Identity not loaded.', type: 'alert' });
+                   }}
+                   className="h-14 bg-primary text-white font-black rounded-[20px] shadow-lg shadow-primary/20 active:scale-[0.98] transition-all flex items-center justify-center text-xs uppercase tracking-widest"
+                 >
+                   Send Test Push
+                 </button>
+               </div>
+             )}
           </div>
         </div>
 
