@@ -94,6 +94,7 @@ export function CallScreen({
   // Categories State
   const [catScore, setCatScore] = useState({ me: 0, partner: 0 });
   const [catPrompt, setCatPrompt] = useState({ cat: '', letter: '' });
+  const [catTimer, setCatTimer] = useState(10);
 
   // Jigsaw State
   const [jigImg, setJigImg] = useState<string | null>(null);
@@ -128,6 +129,7 @@ export function CallScreen({
        } else if (evt.game === GAME_CATEGORIES) {
           setCatScore({ me: 0, partner: 0 });
           setCatPrompt({ cat: evt.cat, letter: evt.letter });
+          setCatTimer(10);
        } else if (evt.game === GAME_JIGSAW) {
           setJigImg(evt.img);
           setJigState(evt.state);
@@ -148,8 +150,9 @@ export function CallScreen({
     }
     // Categories Logic
     else if (evt.action === 'cat_buzz') {
-       setCatScore(prev => ({ ...prev, partner: prev.partner + 1 }));
+       if (evt.scored) setCatScore(prev => ({ ...prev, partner: prev.partner + 1 }));
        setCatPrompt({ cat: evt.cat, letter: evt.letter });
+       setCatTimer(10);
     }
     // Jigsaw Logic
     else if (evt.action === 'jig_move') {
@@ -179,6 +182,28 @@ export function CallScreen({
       return () => clearInterval(timer);
   }, [activeGame]);
 
+  // ── Categories Auto Buzzer (Timer) Tick ──
+  useEffect(() => {
+      let timer: any;
+      if (activeGame === GAME_CATEGORIES) {
+          timer = setInterval(() => {
+              setCatTimer(prev => {
+                  if (prev <= 1) {
+                      if (isGameHost) {
+                          const c = CATEGORY_PROMPTS[Math.floor(Math.random() * CATEGORY_PROMPTS.length)];
+                          const l = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
+                          setCatPrompt({ cat: c, letter: l });
+                          onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l, scored: false });
+                      }
+                      return 10;
+                  }
+                  return prev - 1;
+              });
+          }, 1000);
+      }
+      return () => clearInterval(timer);
+  }, [activeGame, isGameHost, onSendGameEvent]);
+
   const handleStartGame = (gameType: string) => {
      setActiveGame(gameType);
      setIsGameHost(true);
@@ -196,6 +221,7 @@ export function CallScreen({
         const letter = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
         setCatScore({ me: 0, partner: 0 });
         setCatPrompt({ cat, letter });
+        setCatTimer(10);
         onSendGameEvent({ action: 'start', game: GAME_CATEGORIES, cat, letter });
      } else if (gameType === GAME_JIGSAW) {
         // Build Jigsaw
@@ -238,7 +264,8 @@ export function CallScreen({
       const c = CATEGORY_PROMPTS[Math.floor(Math.random() * CATEGORY_PROMPTS.length)];
       const l = ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
       setCatPrompt({ cat: c, letter: l });
-      onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l });
+      setCatTimer(10);
+      onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l, scored: true });
       if (myScore >= 5) { alert('You won Categories Quick Fire!'); setActiveGame(null); onSendGameEvent({action:'end'}); }
   };
 
@@ -403,12 +430,13 @@ export function CallScreen({
         {activeGame === GAME_CATEGORIES && (
             <div style={{ position: 'absolute', top: '100px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 12 }}>
                 <div style={{ background: 'rgba(0,0,0,0.8)', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', color: 'white' }}>You: {catScore.me}  —  Them: {catScore.partner}</div>
-                <div style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+                <div style={{ marginTop: '15px', fontSize: '24px', fontWeight: '900', color: catTimer <= 3 ? '#ef4444' : 'white', textShadow: '0 2px 10px black' }}>00:{catTimer < 10 ? `0${catTimer}` : catTimer}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px', marginTop: '15px' }}>
                     <div style={{ fontSize: '40px', fontWeight: '900', background: '#eab308', color: 'black', width: '80px', height: '80px', borderRadius: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow:'0 10px 25px rgba(234,179,8,0.4)' }}>{catPrompt.letter}</div>
                     <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', textShadow: '0 2px 10px black', textTransform: 'uppercase', letterSpacing: '2px' }}>{catPrompt.cat}</div>
                 </div>
-                <button onClick={handleBuzzer} style={{ width: '120px', height: '120px', background: '#ef4444', borderRadius: '50%', border: '8px solid #b91c1c', marginTop: '60px', fontSize: '20px', color: 'white', fontWeight: '900', boxShadow: '0 10px 40px rgba(239,68,68,0.5)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.9)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>BUZZER</button>
-                <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '40px', fontWeight: 'bold', fontSize:'14px' }}>Quit</button>
+                <button onClick={handleBuzzer} style={{ width: '120px', height: '120px', background: '#ef4444', borderRadius: '50%', border: '8px solid #b91c1c', marginTop: '40px', fontSize: '20px', color: 'white', fontWeight: '900', boxShadow: '0 10px 40px rgba(239,68,68,0.5)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.9)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>BUZZER</button>
+                <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '30px', fontWeight: 'bold', fontSize:'14px' }}>Quit</button>
             </div>
         )}
 
