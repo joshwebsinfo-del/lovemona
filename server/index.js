@@ -12,6 +12,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Environment Validation
+const requiredEnv = ['SUPABASE_URL', 'SUPABASE_KEY', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'];
+const missingEnv = requiredEnv.filter(key => !process.env[key]);
+
+if (missingEnv.length > 0) {
+  console.error('\x1b[31m%s\x1b[0m', 'CRITICAL ERROR: Missing Required Environment Variables!');
+  console.error('\x1b[33m%s\x1b[0m', `The following keys are missing: ${missingEnv.join(', ')}`);
+  console.error('\x1b[36m%s\x1b[0m', 'Please add them to your Render Dashboard or .env file.');
+  process.exit(1);
+}
+
 // Initialize Supabase
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
