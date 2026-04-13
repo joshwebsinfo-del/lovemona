@@ -42,6 +42,8 @@
 
 @utility glass-card {
   @apply glass rounded-2xl p-4 shadow-xl;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 @utility btn-primary {
@@ -116,4 +118,17 @@
 
 #reader img {
   display: none !important;
+}
+
+/* Optimization Utilities */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+  will-change: transform, opacity;
+}
+
+.performance-blur {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }

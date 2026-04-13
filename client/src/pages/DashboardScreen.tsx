@@ -9,16 +9,16 @@ import { initSocket, getSocket } from '../lib/socket';
 import type { Partner, AuthConfig } from '../lib/types';
 
 // --- ROMANTIC FLOATING LIGHTS ---
-const RomanticAtmosphere: React.FC = () => {
+const RomanticAtmosphere: React.FC = React.memo(() => {
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none overflow-hidden will-change-transform">
       <motion.div 
         animate={{ 
           scale: [1, 1.15, 1],
           opacity: [0.2, 0.4, 0.2],
         }}
         transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/10 blur-[150px] rounded-full" 
+        className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/10 blur-[150px] rounded-full will-change-opacity" 
       />
       <motion.div 
         animate={{ 
@@ -26,7 +26,7 @@ const RomanticAtmosphere: React.FC = () => {
           opacity: [0.15, 0.35, 0.15],
         }}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-[-30%] right-[-20%] w-[120vw] h-[120vw] bg-purple-600/10 blur-[180px] rounded-full" 
+        className="absolute bottom-[-30%] right-[-20%] w-[120vw] h-[120vw] bg-purple-600/10 blur-[180px] rounded-full will-change-opacity" 
       />
       
       {[0.15, 0.45, 0.75, 0.25, 0.85, 0.55].map((val, i) => (
@@ -35,12 +35,12 @@ const RomanticAtmosphere: React.FC = () => {
           initial={{ y: '110vh', x: `${val * 100}vw`, opacity: 0 }}
           animate={{ y: '-10vh', opacity: [0, 0.4, 0] }}
           transition={{ duration: val * 8 + 12, repeat: Infinity, delay: i * 3 }}
-          className="absolute w-1 h-1 bg-white rounded-full blur-[1px]"
+          className="absolute w-1 h-1 bg-white rounded-full blur-[1px] will-change-[transform,opacity]"
         />
       ))}
     </div>
   );
-};
+});
 
 export const DashboardScreen = React.memo(() => {
   const navigate = useNavigate();
@@ -197,24 +197,30 @@ export const DashboardScreen = React.memo(() => {
                   .select('*')
                   .or(`and(owner_id.eq.${identity.userId},partner_id.eq.${p.userId}),and(owner_id.eq.${p.userId},partner_id.eq.${identity.userId})`)
                   .order('updated_at', { ascending: false });
-                
                 if (rows && rows.length > 0 && sharedKey) {
-                   const processedTypes = new Set();
-                   for (const row of rows) {
-                      if (processedTypes.has(row.type)) continue;
-                      processedTypes.add(row.type);
-                      try {
-                         const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
-                         const parsed = JSON.parse(dec);
-                         if (row.type === 'note') setStickyNote(parsed);
-                         else if (row.type === 'mood' && row.owner_id === p.userId) setPartnerMood(parsed.mood);
-                         else if (row.type === 'countdown') setCountdown(parsed.target);
-                      } catch(e) {}
-                   }
-                }
-             } catch(e) {}
-          };
-          fetchCloudData();
+                    const processedTypes = new Set();
+                    const db = await initDB();
+                    for (const row of rows) {
+                       if (processedTypes.has(row.type)) continue;
+                       processedTypes.add(row.type);
+                       try {
+                          const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
+                          const parsed = JSON.parse(dec);
+                          if (row.type === 'note') {
+                             setStickyNote(parsed);
+                             await db.put('settings', { id: 'sticky_note', data: parsed });
+                          } else if (row.type === 'mood' && row.owner_id === p.userId) {
+                             setPartnerMood(parsed.mood);
+                          } else if (row.type === 'countdown') {
+                             setCountdown(parsed.target);
+                             await db.put('settings', { id: 'countdown_target', data: parsed.target });
+                          }
+                       } catch(e) {}
+                    }
+                 }
+              } catch(e) {}
+           };
+           fetchCloudData();
 
           return () => { 
              s.off('message:receive', handleReceive); 

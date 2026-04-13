@@ -305,16 +305,21 @@ export function CallScreen({
     <div className="call-screen">
       <div className="call-screen__glow" />
 
-      {/* Header Controls (Only when connected and in video) */}
-      {connected && !activeGame && callType !== 'game' && (
-        <div className="call-screen__header">
-          <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
-          <div style={{ display: 'flex', gap: '15px' }}>
-             <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><SwitchCamera size={20} /></button>
-             <button className="call-screen__icon-btn" onClick={() => { setShowFilters(!showFilters); setShowGames(false); }} aria-label="Filters"><Wand2 size={20} /></button>
-          </div>
-        </div>
-      )}
+       {/* Header Controls (Only when connected) */}
+       {connected && !activeGame && (
+         <div className="call-screen__header">
+           {callType !== 'game' ? (
+              <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
+           ) : <div />}
+           
+           <div style={{ display: 'flex', gap: '15px' }}>
+              <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><SwitchCamera size={20} /></button>
+              {callType !== 'game' && (
+                 <button className="call-screen__icon-btn" onClick={() => { setShowFilters(!showFilters); setShowGames(false); }} aria-label="Filters"><Wand2 size={20} /></button>
+              )}
+           </div>
+         </div>
+       )}
       
       {/* Game Selector Menu */}
       {showGames && connected && callType === 'video' && !activeGame && (
@@ -388,16 +393,39 @@ export function CallScreen({
         {!connected && (
           <div className="call-screen__actions">
             {incoming ? (
-              <>
-                <div className="call-screen__btn-col">
-                  <button className="call-screen__btn call-screen__btn--decline" onClick={onDecline}>✕</button>
-                  <span className="call-screen__btn-label" style={{color: '#ef4444'}}>Decline</span>
+              callType === 'game' ? (
+                <div className="flex flex-col items-center w-full max-w-[280px]">
+                   <div className="w-20 h-20 bg-secondary/20 rounded-3xl flex items-center justify-center mb-6 border border-secondary/30 animate-pulse">
+                      <Gamepad2 className="text-secondary" size={40} />
+                   </div>
+                   <h2 className="text-white text-2xl font-black tracking-tighter mb-1 uppercase italic">Game Challenge</h2>
+                   <p className="text-white/40 text-[10px] font-black tracking-[0.2em] mb-10 uppercase">Tap to entering arena</p>
+                   
+                   <div className="flex justify-between w-full">
+                      <div className="flex flex-col items-center">
+                         <button className="w-16 h-16 bg-white/5 text-white/40 rounded-full flex items-center justify-center hover:bg-red-500/20 hover:text-red-500 transition-all active:scale-95 border border-white/10" onClick={onDecline}>✕</button>
+                         <span className="text-[10px] text-white/30 font-black tracking-widest mt-3 uppercase">Ignore</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                         <button className="w-16 h-16 bg-secondary text-black rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.5)] hover:scale-110 transition-all active:scale-95" onClick={onAnswer}>
+                            <Gamepad2 size={28} />
+                         </button>
+                         <span className="text-[11px] text-secondary font-black tracking-widest mt-3 uppercase">Accept</span>
+                      </div>
+                   </div>
                 </div>
-                <div className="call-screen__btn-col">
-                  <button className="call-screen__btn call-screen__btn--answer" onClick={onAnswer}>📞</button>
-                  <span className="call-screen__btn-label" style={{color: '#22c55e'}}>Answer</span>
-                </div>
-              </>
+              ) : (
+                <>
+                  <div className="call-screen__btn-col">
+                    <button className="call-screen__btn call-screen__btn--decline" onClick={onDecline}>✕</button>
+                    <span className="call-screen__btn-label" style={{color: '#ef4444'}}>Decline</span>
+                  </div>
+                  <div className="call-screen__btn-col">
+                    <button className="call-screen__btn call-screen__btn--answer" onClick={onAnswer}>📞</button>
+                    <span className="call-screen__btn-label" style={{color: '#22c55e'}}>Answer</span>
+                  </div>
+                </>
+              )
             ) : (
               <div className="call-screen__btn-col">
                 <button className="call-screen__btn call-screen__btn--end" onClick={onEndCall}><PhoneOff size={32} /></button>

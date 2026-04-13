@@ -351,8 +351,7 @@ const AppContent = () => {
   // ── Camera management ──
   const acquireVideoTrack = async (mode: 'user' | 'environment') => {
     try {
-      if (callType === 'game') return null;
-      let newStream;
+       let newStream;
       try {
           newStream = await navigator.mediaDevices.getUserMedia({ 
               video: { facingMode: { exact: mode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } 
@@ -399,7 +398,7 @@ const AppContent = () => {
     if (isInitiator) iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: (type === 'video') ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
+          video: (type === 'video' || type === 'game') ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
        });
        localStreamRef.current = stream;
