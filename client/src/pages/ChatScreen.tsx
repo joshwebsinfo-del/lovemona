@@ -1277,9 +1277,66 @@ const ChatInput = React.memo(({
            ) : (
              <motion.button layoutId="chat-primary-action" onClick={startRecording} className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"><Mic size={20} /></motion.button>
            )}
-        </div>
-      </div>
-    </div>
   </div>
 ));
+
+const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstance = useRef<any>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapRef.current && !mapInstance.current) {
+        const L = (window as any).L;
+        if (!L) return;
+
+        try {
+          const map = L.map(mapRef.current, {
+            zoomControl: false,
+            attributionControl: false,
+            fadeAnimation: true,
+            zoomAnimation: true
+          }).setView([lat, lng], 18);
+
+          // Use Google Hybrid Tiles (lyrs=y) for the "Classic" look with Label overlays
+          L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+            maxZoom: 20,
+            edgeBufferTiles: 1
+          }).addTo(map);
+
+          L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+          const icon = L.divIcon({
+            className: 'custom-map-marker',
+            html: `
+              <div class="relative flex items-center justify-center">
+                <div class="absolute w-12 h-12 bg-primary/30 rounded-full animate-ping"></div>
+                <div class="relative w-5 h-5 bg-primary border-2 border-white rounded-full shadow-2xl"></div>
+              </div>
+            `,
+            iconSize: [48, 48],
+            iconAnchor: [24, 24]
+          });
+
+          L.marker([lat, lng], { icon }).addTo(map);
+          mapInstance.current = map;
+          setTimeout(() => map.invalidateSize(), 150);
+        } catch (e) {
+          console.error('Map Load Error:', e);
+        }
+      }
+    }, 150);
+
+    return () => {
+      clearTimeout(timer);
+      if (mapInstance.current) {
+        mapInstance.current.remove();
+        mapInstance.current = null;
+      }
+    };
+  }, [lat, lng]);
+
+  return <div ref={mapRef} className="w-full h-full bg-black border-none outline-none overflow-hidden" />;
+};
+
 
