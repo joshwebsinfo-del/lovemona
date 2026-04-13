@@ -1029,35 +1029,35 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       </AnimatePresence>
 
         {fullScreenMap && (
-          <div className="fixed inset-0 z-[120] bg-black flex flex-col">
-            <div className="p-4 bg-[#0a0a0c] border-b border-white/5 flex justify-between items-center z-10">
+          <div className="fixed inset-0 z-[120] bg-black flex flex-col animate-in fade-in duration-300">
+            <div className="p-4 bg-[#0a0a0c] border-b border-white/5 flex justify-between items-center z-10 shadow-2xl">
                <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                     <MapPin className="text-primary" size={20} />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-sm">Satellite Hybrid</h3>
-                    <p className="text-green-400 text-[9px] uppercase font-black tracking-widest">Enhanced Detail View</p>
+                    <h3 className="text-white font-bold text-sm tracking-wide">Live Location</h3>
+                    <div className="flex items-center space-x-1.5">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                      <p className="text-green-400 text-[10px] uppercase font-black tracking-widest leading-none">High-Detail Hybrid</p>
+                    </div>
                   </div>
                </div>
-               <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center text-white active:scale-95"><X size={20} /></button>
+               <button onClick={() => setFullScreenMap(null)} className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white active:scale-90 transition-transform"><X size={22} /></button>
             </div>
             
             <div className="flex-1 bg-black relative">
-               <iframe 
-                 src={`https://maps.google.com/maps?q=${fullScreenMap.lat},${fullScreenMap.lng}&t=h&z=19&output=embed`}
-                 className="absolute inset-0 w-full h-full border-0"
-                 allowFullScreen
-               />
+               <LeafletMap lat={fullScreenMap.lat} lng={fullScreenMap.lng} />
             </div>
 
-            <div className="p-4 bg-[#0a0a0c] border-t border-white/5 flex justify-center">
+            <div className="p-6 bg-[#0a0a0c] border-t border-white/5 flex flex-col space-y-4">
                <button 
                   onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${fullScreenMap.lat},${fullScreenMap.lng}`, '_blank')}
-                  className="bg-primary text-white font-black px-8 py-3.5 rounded-2xl text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all"
+                  className="bg-primary hover:bg-primary/90 text-white font-black px-8 py-4 rounded-3xl text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center space-x-3"
                >
-                  Get Directions
+                  <span>🧭 Open in Google Maps</span>
                </button>
+               <p className="text-[10px] text-white/30 text-center uppercase tracking-widest font-black">Stable Satellite Connectivity Active</p>
             </div>
           </div>
         )}
