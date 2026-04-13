@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Smile } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, Smile, ChevronLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
@@ -118,6 +119,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
 };
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
@@ -203,6 +205,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       };
       update();
     } catch (e) { console.error('Audio analysis failed', e); }
+  };
+
+  const handleMessageTap = useCallback((id: string) => {
+    setSelectedMessageId(prev => prev === id ? null : id);
+  }, []);
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputValue(val);
+    if (!sharedKey) return;
+    
+    // Send typing status throttled
+    if (!typingTimeoutRef.current) {
+       sendSecurePayload({ type: 'typing' });
+    } else {
+       clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+       typingTimeoutRef.current = null;
+    }, 2000);
   };
 
   const stopAudioAnalysis = () => {
@@ -1020,28 +1042,20 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                   <div className="w-3 h-3 bg-green-500 rounded-full absolute inset-0" />
                </div>
             </div>
-          </div>
-        );
-      }
-      return <p className="text-[15px] leading-relaxed break-words">{payload.text}</p>;
-    } catch {
-      return <p className="text-[15px] leading-relaxed break-words">{msgContent}</p>;
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] relative overflow-hidden w-full">
+      <LiveWallpaper type={wallpaper} audioLevel={audioLevel} />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a0a0c] z-0 pointer-events-none" />
+
       {isVideoRecording && (
          <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center pt-20 pb-40">
             <h2 className="text-white/60 text-xs mb-8 uppercase tracking-widest bg-white/5 py-1.5 px-6 rounded-full border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.1)]">Video Note Recording</h2>
-            
             <div className="relative w-full max-w-[320px] aspect-[3/4] rounded-[40px] overflow-hidden shadow-[0_0_60px_rgba(239,68,68,0.3)] border-2 border-red-500/30">
                <video ref={videoPreviewRef} className="w-full h-full object-cover" muted playsInline />
                <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-red-400 font-black text-sm tracking-widest border border-red-500/30">
                   {formatTime(recordDuration)}
                </div>
             </div>
-
             <div className="absolute bottom-16 flex space-x-6 items-center">
                <button onClick={cancelRecording} className="w-14 h-14 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform hover:bg-white/20"><X size={24} /></button>
                <button onClick={stopVideoNote} className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-[0_0_40px_rgba(239,68,68,0.6)] transition-transform hover:bg-red-400"><Send size={32} /></button>
@@ -1049,156 +1063,28 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          </div>
       )}
 
-      {/* BACKGROUND WALLPAPER */}
-      <LiveWallpaper type={wallpaper} audioLevel={audioLevel} />
-      
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a0a0c] z-0 pointer-events-none" />
-      
-      {/* ── TOP HEADER ── */}
-      <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/95 border-b border-white/5 shadow-2xl px-5 py-3.5 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            {/* Online indicator dot */}
-            {partnerOnline && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0c] z-10" />}
-            <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
-              <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" loading="lazy" />
-            </div>
-            <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
-          </div>
-          <div>
-            <h2 className="font-semibold text-white text-[16px] tracking-wide leading-tight">{partnerInfo.nick}</h2>
-            <div className="flex items-center mt-0.5 space-x-1">
-               <ShieldCheck size={12} className={partnerOnline ? "text-green-400" : "text-white/30"} />
-               <p className={`text-[11px] font-medium tracking-wider uppercase ${partnerOnline ? 'text-green-400' : 'text-white/30'}`}>
-                 {partnerOnline ? 'Online & Secure' : 'Secure Line'}
-               </p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-3 text-white/60">
-           <button onClick={() => setIsBlurred(!isBlurred)} className={`p-2.5 rounded-full active:scale-95 transition-all ${isBlurred ? 'bg-primary/20 text-primary' : 'text-white/60 hover:bg-white/10'}`}>
-             {isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}
-           </button>
-          <button onClick={() => startCall('voice')} className="hover:text-white transition-colors active:scale-95"><Phone size={22} /></button>
-          <button onClick={() => startCall('video')} className="hover:text-white transition-colors active:scale-95"><Video size={24} /></button>
-          <div className="relative">
-            <button onClick={() => setShowMenu(!showMenu)} className="hover:text-white transition-colors">
-              <MoreVertical size={24} />
-            </button>
-            <AnimatePresence>
-              {showMenu && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                  className="absolute right-0 top-10 w-44 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden"
-                >
-                    <button onClick={() => { sendSecurePayload({ type: 'location:request' }); setShowMenu(false); }} className="w-full text-left px-4 py-2 text-white text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5 flex items-center justify-between">
-                      Ping Location <MapPin size={14} className="text-primary" />
-                    </button>
-                    <button onClick={clearChat} className="w-full text-left px-4 py-2 text-red-400 text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5">
-                      Clear History
-                    </button>
-                    <div className="px-4 py-2">
-                       <p className="text-[10px] text-white/30 uppercase tracking-widest font-black mb-2">Wallpaper</p>
-                       <div className="grid grid-cols-2 gap-2">
-                          {[
-                            { name: 'Nebula', type: 'nebula' },
-                            { name: 'Dream', type: 'video:https://cdn.pixabay.com/video/2021/09/01/87134-596489432_tiny.mp4' },
-                            { name: 'Aurora', type: 'video:https://cdn.pixabay.com/video/2024/02/09/199738-911226105_tiny.mp4' },
-                            { name: 'Rose', type: 'rose' }
-                          ].map(w => (
-                             <button 
-                                key={w.name} 
-                                onClick={() => { setWallpaper(w.type); setShowMenu(false); }}
-                                className={`px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all ${wallpaper === w.type ? 'bg-primary text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
-                             >
-                                {w.name}
-                             </button>
-                          ))}
-                       </div>
-                    </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
+      <ChatHeader 
+        partnerInfo={partnerInfo} partnerOnline={partnerOnline} isBlurred={isBlurred} setIsBlurred={setIsBlurred} 
+        startCall={startCall} showMenu={showMenu} setShowMenu={setShowMenu} clearChat={clearChat} 
+        sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} setWallpaper={setWallpaper} navigate={navigate} 
+      />
 
-      {/* ── MESSAGE LIST ── */}
-      <div 
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar"
-      >
-        {messages.map((msg, i) => {
-          const isMe = msg.senderId === myUserId;
-          const showTail = i === messages.length - 1 || messages[i + 1].senderId !== msg.senderId;
-          const isNew = i >= messages.length - 3; // Only animate last 3 messages
+      <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar">
+        {messages.map((msg, i) => (
+            <MessageBubble 
+              key={msg.id} msg={msg} i={i} isMe={msg.senderId === myUserId}
+              showTail={i === messages.length - 1 || messages[i + 1].senderId !== msg.senderId}
+              isNew={i >= messages.length - 3} selectedMessageId={selectedMessageId}
+              isBlurred={isBlurred} handleMessageTap={handleMessageTap} sendReaction={sendReaction}
+              setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId}
+              sharedKey={sharedKey} setViewMedia={setViewMedia} setFullScreenMap={setFullScreenMap}
+              startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis}
+            />
+        ))}
 
-          return (
-               <div
-                key={msg.id}
-                id={`msg-${msg.id}`}
-                className={`flex ${isMe ? 'justify-end' : 'justify-start'} w-full ${isNew ? 'animate-fade-in' : ''} ${selectedMessageId === msg.id ? 'z-50 relative' : ''}`}
-              >
-                <div
-                  onClick={() => handleMessageTap(msg.id)}
-                  className={`max-w-[85%] px-4 py-2.5 shadow-lg relative ${
-                    isMe
-                      ? 'bg-gradient-sender text-white ' + (showTail ? 'rounded-2xl rounded-br-sm' : 'rounded-2xl')
-                      : 'bg-gradient-receiver border border-white/5 text-white/90 ' + (showTail ? 'rounded-2xl rounded-bl-sm' : 'rounded-2xl')
-                  } ${isBlurred ? 'blur-md hover:blur-none active:blur-none transition-all duration-300' : ''} ${selectedMessageId === msg.id ? 'ring-2 ring-primary ring-offset-2 ring-offset-[#0a0a0c]' : ''}`}
-                  style={{ userSelect: 'none' }}
-                >
-                  {selectedMessageId === msg.id && (
-                     <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} flex bg-zinc-800 rounded-full shadow-2xl px-3 py-1 space-x-3 z-50 animate-fade-in`}>
-                        {['❤️', '😂', '😮', '😢', '🔥'].map(emoji => (
-                           <button key={emoji} onClick={(e) => { e.stopPropagation(); sendReaction(msg.id, emoji); }} className="text-xl hover:scale-125 transition-transform active:scale-90">{emoji}</button>
-                        ))}
-                        <div className="w-[1px] h-6 bg-white/20 mx-1" />
-                        <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setSelectedMessageId(null); }} className="text-[10px] font-black text-primary uppercase tracking-widest px-2 active:scale-95">Reply</button>
-                     </div>
-                  )}
-                  {(() => {
-                     try {
-                        const pl = JSON.parse(msg.text);
-                        return (
-                           <div className="flex flex-col">
-                              {pl.replyTo && (
-                                 <div className="mb-2 pl-2 border-l-2 border-white/30 bg-black/10 rounded overflow-hidden p-1.5 opacity-80 cursor-pointer hover:opacity-100" onClick={(e) => { e.stopPropagation(); const el = document.getElementById(`msg-${pl.replyTo.id}`); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}); }}>
-                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary mb-0.5">Replying to</div>
-                                    <div className="truncate w-full max-w-[200px] text-xs italic">{pl.replyTo.text}</div>
-                                 </div>
-                              )}
-                              {renderMessageContent(msg.text)}
-                           </div>
-                        );
-                     } catch { return renderMessageContent(msg.text); }
-                  })()}
-                
-                {msg.reaction && (
-                  <div className={`absolute -bottom-3 ${isMe ? '-left-2' : '-right-2'} text-xl bg-[#0a0a0c] border border-white/10 rounded-full px-1.5 py-0.5 shadow-2xl animate-fade-in`}>
-                    {msg.reaction}
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end mt-1 space-x-1.5 opacity-60">
-                  <span className="text-[10px] font-medium tracking-wide">
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {isMe && <span className="text-[10px] tracking-tighter">✓✓</span>}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Typing Bubble */}
         <AnimatePresence>
           {isPartnerTyping && (
-             <motion.div 
-               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
-               className="flex justify-start w-full"
-             >
+             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex justify-start w-full">
                 <div className="bg-zinc-800/80 backdrop-blur-md px-4 py-3 rounded-2xl rounded-bl-sm border border-white/5 flex items-center space-x-1.5">
                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -1209,160 +1095,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         </AnimatePresence>
       </div>
 
-      {/* ── BOTTOM INPUT BAR ── */}
-      <div className="fixed bottom-0 w-full p-4 pb-12 z-20 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c] to-transparent pt-12">
-        <div className="flex flex-col space-y-2 relative">
-          
-          <AnimatePresence>
-             {replyingTo && (
-                <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, scale: 0.95}} className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-white/80 mx-2 shadow-xl">
-                   <div className="flex flex-col overflow-hidden">
-                      <span className="text-[10px] text-primary font-black uppercase tracking-widest">Replying</span>
-                      <span className="text-xs truncate max-w-[200px] italic">
-                         {(() => { try { const p = JSON.parse(replyingTo.text); return p.text || (p.type==='media'?'Media File':'Message'); } catch { return 'Message'; }})()}
-                      </span>
-                   </div>
-                   <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded-full"><X size={16}/></button>
-                </motion.div>
-             )}
-          </AnimatePresence>
+      <ChatInput 
+        replyingTo={replyingTo} setReplyingTo={setReplyingTo} showStickers={showStickers} setShowStickers={setShowStickers}
+        stickerTab={stickerTab} setStickerTab={setStickerTab} isProcessingMedia={isProcessingMedia} 
+        isRecording={isRecording} formatTime={formatTime} recordDuration={recordDuration} 
+        sendLocation={sendLocation} fileInputRef={fileInputRef} handleFileUpload={handleFileUpload} 
+        startVideoNote={startVideoNote} inputValue={inputValue} handleTyping={handleTyping} 
+        handleSendText={handleSendText} handleSendSticker={sendSticker} startRecording={startRecording} 
+        cancelRecording={cancelRecording} stopRecording={stopRecording} 
+      />
 
-           <AnimatePresence>
-              {showStickers && (
-                 <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[400px] backdrop-blur-3xl">
-                    <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
-                       <button onClick={() => setStickerTab('3d')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === '3d' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>3D Emojis</button>
-                       <button onClick={() => setStickerTab('classic')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === 'classic' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>Classic</button>
-                       <button onClick={() => setStickerTab('bots')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === 'bots' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>Bots</button>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto no-scrollbar">
-                       {stickerTab === 'classic' ? (
-                          <div className="h-full">
-                             <EmojiPicker 
-                                theme={Theme.DARK} 
-                                width="100%" 
-                                height="100%"
-                                searchDisabled={false}
-                                skinTonesDisabled={false}
-                                onEmojiClick={(emoji: EmojiClickData) => {
-                                   sendSticker(emoji.emoji); // Send the actual emoji string
-                                   setShowStickers(false);
-                                }}
-                             />
-                          </div>
-                       ) : (
-                          <div className="p-4 grid grid-cols-4 gap-4">
-                             {stickerTab === '3d' && ['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
-                                <div key={name} onClick={() => sendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
-                                   <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" onError={(e) => (e.currentTarget.parentElement!.style.display = 'none')} />
-                                </div>
-                             ))}
-                             {stickerTab === 'bots' && (
-                                <>
-                                   {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
-                                      <img key={seed} 
-                                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
-                                           src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
-                                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
-                                      />
-                                   ))}
-                                   {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                                      <img key={n} 
-                                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`)} 
-                                           src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`} 
-                                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
-                                      />
-                                   ))}
-                                </>
-                             )}
-                          </div>
-                       )}
-                    </div>
-                 </motion.div>
-              )}
-           </AnimatePresence>
-
-          {/* Integrated Input Pill */}
-          <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
-            {isProcessingMedia && (
-               <div className="absolute inset-0 bg-black/60 rounded-[40px] flex items-center justify-center z-10 backdrop-blur-sm">
-                 <div className="w-5 h-5 border-2 border-primary/50 border-t-primary rounded-full animate-spin" />
-               </div>
-            )}
-            
-            <div className="flex-1 flex items-center min-w-0">
-               {isRecording ? (
-                 <div className="flex-1 flex items-center px-4">
-                    <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-ping" />
-                    <span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
-                    <div className="ml-auto text-[10px] text-white/40 uppercase tracking-widest font-black mr-2">Recording</div>
-                 </div>
-               ) : (
-                 <>
-                    <button onClick={sendLocation} className="p-2 text-white/40 hover:text-primary transition-colors rounded-full active:scale-90 flex-shrink-0" title="Send Location">
-                       <MapPin size={22} />
-                    </button>
-                   <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
-                      <Camera size={22} />
-                   </button>
-                   <button onClick={startVideoNote} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90 flex-shrink-0">
-                      <Video size={22} />
-                   </button>
-                    <button onClick={() => setShowStickers(!showStickers)} className={`p-2 transition-colors rounded-full active:scale-90 flex-shrink-0 ${showStickers ? 'text-primary bg-primary/20' : 'text-white/30 hover:text-white'}`}>
-                       <Smile size={22} />
-                    </button>
-                   <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
-                   
-                   <input
-                     type="text"
-                     value={inputValue}
-                     onChange={handleTyping}
-                     onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
-                     placeholder="Whisper something..."
-                     className="bg-transparent flex-1 min-w-0 outline-none text-white text-[16px] px-2 placeholder:text-white/20"
-                   />
-                 </>
-               )}
-            </div>
-
-            {/* ACTION BUTTONS (Inner Pill) */}
-            <div className="flex items-center space-x-1.5 ml-1 flex-shrink-0 mr-1">
-               {inputValue.trim() ? (
-                 <motion.button 
-                   layoutId="chat-primary-action"
-                   initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                   onClick={handleSendText}
-                   className="w-11 h-11 bg-primary rounded-full flex items-center justify-center text-white active:scale-90 shadow-lg flex-shrink-0"
-                 >
-                   <Send size={18} className="ml-0.5" />
-                 </motion.button>
-               ) : isRecording ? (
-                  <div className="flex items-center space-x-1 flex-shrink-0">
-                     <button onClick={cancelRecording} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 active:scale-95 flex-shrink-0"><X size={16} /></button>
-                     <button onClick={() => stopRecording('deep')} className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95 shadow-lg flex-shrink-0">DEEP</button>
-                     <button onClick={() => stopRecording('chipmunk')} className="w-10 h-10 bg-fuchsia-500 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95 shadow-lg flex-shrink-0">FUN</button>
-                     <button onClick={() => stopRecording()} className="w-11 h-11 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-lg flex-shrink-0"><Send size={18} /></button>
-                  </div>
-               ) : (
-                 <motion.button 
-                   layoutId="chat-primary-action"
-                   initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                   onClick={startRecording}
-                   className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90 flex-shrink-0"
-                 >
-                   <Mic size={20} />
-                 </motion.button>
-               )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Lightbox Overlay ── */}
       <AnimatePresence>
         {viewMedia && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-center items-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-md flex flex-col justify-center items-center">
             <button onClick={() => setViewMedia(null)} className="absolute top-6 right-6 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95 z-10"><X size={24} /></button>
             {viewMedia.type === 'photo' && <img src={viewMedia.url} className="max-w-full max-h-full object-contain" alt="Enlarged" />}
             {viewMedia.type === 'video' && <video src={viewMedia.url} className="max-w-full max-h-full" controls autoPlay />}
@@ -1370,46 +1115,282 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         )}
       </AnimatePresence>
 
-      {/* ── Map Lightbox (In-App Satellite View) ── */}
       <AnimatePresence>
         {fullScreenMap && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black flex flex-col">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
+            className="fixed inset-0 z-[120] bg-black flex flex-col will-change-transform contain-strict" style={{ overscrollBehavior: 'none' }}
+          >
             <div className="absolute top-0 left-0 right-0 p-5 flex justify-between items-center z-10 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
                <div className="flex items-center space-x-3">
-                 <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center">
-                   <MapPin size={18} className="text-primary" />
-                 </div>
-                 <div>
-                   <p className="text-white font-bold text-sm tracking-wide">Live Location</p>
-                   <p className="text-white/40 text-[10px] uppercase tracking-widest font-black">Satellite View</p>
-                 </div>
-                 <div className="ml-2 flex items-center space-x-1">
-                   <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
-                   <span className="text-green-400 text-[9px] uppercase font-black tracking-widest">Live</span>
-                 </div>
+                 <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center"><MapPin size={18} className="text-primary" /></div>
+                 <div><p className="text-white font-bold text-sm tracking-wide">Live Location</p><p className="text-white/40 text-[10px] uppercase tracking-widest font-black">Satellite View</p></div>
+                 <div className="ml-2 flex items-center space-x-1"><div className="w-2 h-2 bg-green-500 rounded-full animate-ping" /><span className="text-green-400 text-[9px] uppercase font-black tracking-widest">Live</span></div>
                </div>
                <button onClick={() => setFullScreenMap(null)} className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white active:scale-95"><X size={20} /></button>
             </div>
             <div className="flex-1 w-full relative">
                <iframe 
                  src={`https://maps.google.com/maps?q=${fullScreenMap.lat},${fullScreenMap.lng}&t=k&z=18&output=embed`}
-                 className="w-full h-full"
-                 style={{ border: 0 }}
-                 allowFullScreen
+                 className="w-full h-full touch-auto" style={{ border: 0, minHeight: '100%' }} allowFullScreen loading="eager"
                />
             </div>
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent flex justify-center z-10">
-               <button 
-                 onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${fullScreenMap.lat},${fullScreenMap.lng}`, '_blank')} 
-                 className="bg-primary text-white rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-widest shadow-2xl active:scale-95 transition-transform"
-               >
-                  🧭 Get Directions
-               </button>
+               <button onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${fullScreenMap.lat},${fullScreenMap.lng}`, '_blank')} className="bg-primary text-white rounded-2xl px-6 py-3 text-sm font-bold uppercase tracking-widest shadow-2xl active:scale-95 transition-transform">🧭 Get Directions</button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 };
+
+// --- SUB-COMPONENTS (Memoized for speed & re-render isolation) ---
+
+const MessageBubble = React.memo(({ 
+  msg, i, isMe, showTail, isNew, selectedMessageId, isBlurred, handleMessageTap, 
+  sendReaction, setReplyingTo, setSelectedMessageId, sharedKey, setViewMedia, 
+  setFullScreenMap, startAudioAnalysis, stopAudioAnalysis 
+}: any) => {
+  const pl: ChatPayload = JSON.parse(msg.text);
+  
+  return (
+    <motion.div 
+      initial={isNew ? { opacity: 0, y: 10, scale: 0.9 } : false} 
+      animate={{ opacity: 1, y: 0, scale: 1 }} 
+      className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'}`}
+    >
+      <div 
+        onClick={() => handleMessageTap(msg.id)}
+        className={`relative max-w-[85%] group ${isBlurred ? 'blur-md hover:blur-none transition-all duration-500' : ''}`}
+      >
+        <div className={`
+          px-4 py-2.5 rounded-3xl shadow-lg relative overflow-hidden backdrop-blur-md border animate-in fade-in slide-in-from-bottom-2 duration-300
+          ${isMe ? 'bg-primary/90 text-white border-white/10 rounded-br-none' : 'bg-zinc-800/90 text-zinc-100 border-white/5 rounded-bl-none'}
+          ${selectedMessageId === msg.id ? 'ring-2 ring-white/50 scale-[1.02]' : ''}
+          transition-all duration-200 active:scale-95
+        `}>
+          {pl.replyTo && (
+            <div className="mb-2 bg-black/20 rounded-lg px-2 py-1.5 border-l-2 border-white/30 text-[10px] opacity-70">
+               <p className="font-black uppercase tracking-widest mb-0.5">Response to</p>
+               <p className="truncate italic">{pl.replyTo.text}</p>
+            </div>
+          )}
+
+          {pl.type === 'text' && <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{pl.text}</p>}
+          
+          {pl.type === 'media' && (
+            <MediaWrapper 
+              pl={pl} sharedKey={sharedKey} setViewMedia={setViewMedia} 
+              startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis} 
+            />
+          )}
+
+          {pl.type === 'location' && (
+             <div onClick={() => setFullScreenMap({ lat: pl.lat!, lng: pl.lng! })} className="w-48 h-32 rounded-xl overflow-hidden mt-1 relative border border-white/10 cursor-pointer group/map">
+                <img src={`https://maps.googleapis.com/maps/api/staticmap?center=${pl.lat},${pl.lng}&zoom=15&size=300x200&maptype=satellite&key=YOUR_API_KEY_OR_PUBLIC_FALLBACK&markers=color:red%7C${pl.lat},${pl.lng}`} className="w-full h-full object-cover" alt="Location Map" />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/map:opacity-100 transition-opacity">
+                   <div className="bg-primary px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-xl">Open Map</div>
+                </div>
+                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center space-x-1.5">
+                   <MapPin size={10} className="text-primary" />
+                   <span className="text-[9px] font-bold text-white/80">Satellite Live</span>
+                </div>
+             </div>
+          )}
+
+          {msg.reaction && (
+            <div className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} bg-zinc-900 border border-white/10 rounded-full px-1.5 py-0.5 text-xs shadow-xl animate-bounce`}>
+              {msg.reaction}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end mt-1 space-x-1.5 opacity-60">
+            <span className="text-[10px] font-medium tracking-wide">
+              {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {isMe && <span className="text-[10px] tracking-tighter">✓✓</span>}
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {selectedMessageId === msg.id && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className={`absolute top-full mt-2 z-20 flex bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 shadow-2xl space-x-2 ${isMe ? 'right-0' : 'left-0'}`}>
+              {['❤️', '🔥', '😂', '😮', '😢', '👍'].map(emoji => (
+                <button key={emoji} onClick={(e) => { e.stopPropagation(); sendReaction(msg.id, emoji); }} className="p-1.5 hover:bg-white/10 rounded-lg text-lg transition-transform hover:scale-125 active:scale-90">{emoji}</button>
+              ))}
+              <div className="w-[1px] bg-white/10 mx-1 self-stretch" />
+              <button onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); setSelectedMessageId(null); }} className="p-1.5 px-3 bg-primary/20 text-primary rounded-lg text-xs font-black uppercase tracking-widest border border-primary/20">Reply</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+});
+
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate }: any) => (
+  <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-4 py-3 flex items-center justify-between backdrop-blur-xl">
+    <div className="flex items-center space-x-3">
+      <button onClick={() => navigate('/')} className="p-2 -ml-2 text-white/40 hover:text-white transition-colors active:scale-90">
+         <ChevronLeft size={24} />
+      </button>
+      <div className="relative">
+        {partnerOnline && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0c] z-10" />}
+        <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
+          <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" loading="lazy" />
+        </div>
+        <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
+      </div>
+      <div>
+        <h2 className="font-semibold text-white text-[16px] tracking-wide leading-tight">{partnerInfo.nick}</h2>
+        <div className="flex items-center mt-0.5 space-x-1">
+           <ShieldCheck size={12} className={partnerOnline ? "text-green-400" : "text-white/30"} />
+           <p className={`text-[11px] font-medium tracking-wider uppercase ${partnerOnline ? 'text-green-400' : 'text-white/30'}`}>
+             {partnerOnline ? 'Online & Secure' : 'Secure Line'}
+           </p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="flex items-center space-x-3 text-white/60">
+       <button onClick={() => setIsBlurred(!isBlurred)} className={`p-2.5 rounded-full active:scale-95 transition-all ${isBlurred ? 'bg-primary/20 text-primary' : 'text-white/60 hover:bg-white/10'}`}>
+         {isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}
+       </button>
+      <button onClick={() => startCall('voice')} className="hover:text-white transition-colors active:scale-95"><Phone size={22} /></button>
+      <button onClick={() => startCall('video')} className="hover:text-white transition-colors active:scale-95"><Video size={24} /></button>
+      <div className="relative">
+        <button onClick={() => setShowMenu(!showMenu)} className="hover:text-white transition-colors">
+          <MoreVertical size={24} />
+        </button>
+        <AnimatePresence>
+          {showMenu && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -10 }}
+              className="absolute right-0 top-10 w-44 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-2 z-50 overflow-hidden"
+            >
+                <button onClick={() => { sendSecurePayload({ type: 'location:request' }); setShowMenu(false); }} className="w-full text-left px-4 py-2 text-white text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5 flex items-center justify-between">
+                  Ping Location <MapPin size={14} className="text-primary" />
+                </button>
+                <button onClick={clearChat} className="w-full text-left px-4 py-2 text-red-400 text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5">
+                  Clear History
+                </button>
+                <div className="px-4 py-2">
+                   <p className="text-[10px] text-white/30 uppercase tracking-widest font-black mb-2">Wallpaper</p>
+                   <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { name: 'Nebula', type: 'nebula' },
+                        { name: 'Dream', type: 'video:https://cdn.pixabay.com/video/2021/09/01/87134-596489432_tiny.mp4' },
+                        { name: 'Aurora', type: 'video:https://cdn.pixabay.com/video/2024/02/09/199738-911226105_tiny.mp4' },
+                        { name: 'Rose', type: 'rose' }
+                      ].map(w => (
+                         <button 
+                            key={w.name} 
+                            onClick={() => { setWallpaper(w.type); setShowMenu(false); }}
+                            className={`px-2 py-1.5 rounded-lg text-[9px] font-bold uppercase transition-all ${wallpaper === w.type ? 'bg-primary text-white' : 'bg-white/5 text-white/50 hover:bg-white/10'}`}
+                         >
+                            {w.name}
+                         </button>
+                      ))}
+                   </div>
+                </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  </div>
+));
+
+const ChatInput = React.memo(({ 
+  replyingTo, setReplyingTo, showStickers, setShowStickers, stickerTab, setStickerTab, 
+  isProcessingMedia, isRecording, formatTime, recordDuration, sendLocation, 
+  fileInputRef, handleFileUpload, startVideoNote, inputValue, handleTyping, 
+  handleSendText, handleSendSticker, startRecording, cancelRecording, stopRecording 
+}: any) => (
+  <div className="fixed bottom-0 w-full p-4 pb-12 z-20 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c] to-transparent pt-12">
+    <div className="flex flex-col space-y-2 relative">
+      <AnimatePresence>
+         {replyingTo && (
+            <motion.div initial={{opacity: 0, y: 10}} animate={{opacity: 1, y: 0}} exit={{opacity: 0, scale: 0.95}} className="flex items-center justify-between bg-zinc-900 border border-white/10 rounded-xl px-4 py-2 text-white/80 mx-2 shadow-xl">
+               <div className="flex flex-col overflow-hidden">
+                  <span className="text-[10px] text-primary font-black uppercase tracking-widest">Replying</span>
+                  <span className="text-xs truncate max-w-[200px] italic">
+                     {(() => { try { const p = JSON.parse(replyingTo.text); return p.text || (p.type==='media'?'Media File':'Message'); } catch { return 'Message'; }})()}
+                  </span>
+               </div>
+               <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-white/10 rounded-full"><X size={16}/></button>
+            </motion.div>
+         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+         {showStickers && (
+            <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[400px] backdrop-blur-3xl">
+               <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
+                  {['3d', 'classic', 'bots'].map(tab => (
+                     <button key={tab} onClick={() => setStickerTab(tab as any)} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === tab ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>{tab === '3d' ? '3D Emojis' : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>
+                  ))}
+               </div>
+               <div className="flex-1 overflow-y-auto no-scrollbar">
+                  {stickerTab === 'classic' ? (
+                     <div className="h-full">
+                        <EmojiPicker theme={Theme.DARK} width="100%" height="100%" onEmojiClick={(emoji) => handleSendSticker(emoji.emoji)} />
+                     </div>
+                  ) : (
+                     <div className="p-4 grid grid-cols-4 gap-4">
+                        {stickerTab === '3d' && ['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
+                           <div key={name} onClick={() => handleSendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
+                              <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" />
+                           </div>
+                        ))}
+                        {stickerTab === 'bots' && ['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
+                           <img key={seed} onClick={() => handleSendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1" />
+                        ))}
+                     </div>
+                  )}
+               </div>
+            </motion.div>
+         )}
+      </AnimatePresence>
+
+      <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
+        {isProcessingMedia && <div className="absolute inset-0 bg-black/60 rounded-[40px] flex items-center justify-center z-10 backdrop-blur-sm"><div className="w-5 h-5 border-2 border-primary/50 border-t-primary rounded-full animate-spin" /></div>}
+        <div className="flex-1 flex items-center min-w-0">
+           {isRecording ? (
+             <div className="flex-1 flex items-center px-4">
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-ping" /><span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
+                <div className="ml-auto text-[10px] text-white/40 uppercase tracking-widest font-black mr-2">Recording</div>
+             </div>
+           ) : (
+             <>
+               <button onClick={sendLocation} className="p-2 text-white/40 hover:text-primary transition-colors rounded-full active:scale-90"><MapPin size={22} /></button>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90"><Camera size={22} /></button>
+               <button onClick={startVideoNote} className="p-2 text-white/30 hover:text-white transition-colors rounded-full active:scale-90"><Video size={22} /></button>
+               <button onClick={() => setShowStickers(!showStickers)} className={`p-2 transition-colors rounded-full active:scale-90 ${showStickers ? 'text-primary bg-primary/20' : 'text-white/30 hover:text-white'}`}><Smile size={22} /></button>
+               <input
+                  type="text" value={inputValue} onChange={handleTyping} onKeyDown={(e) => e.key === 'Enter' && handleSendText()} 
+                  placeholder="Whisper something..." className="bg-transparent flex-1 min-w-0 outline-none text-white text-[16px] px-2 placeholder:text-white/20" 
+               />
+               <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,video/*" />
+             </>
+           )}
+        </div>
+        <div className="flex items-center space-x-1.5 ml-1 flex-shrink-0 mr-1">
+           {inputValue.trim() ? (
+             <motion.button layoutId="chat-primary-action" onClick={handleSendText} className="w-11 h-11 bg-primary rounded-full flex items-center justify-center text-white active:scale-90 shadow-lg"><Send size={18} className="ml-0.5" /></motion.button>
+           ) : isRecording ? (
+              <div className="flex items-center space-x-1">
+                 <button onClick={cancelRecording} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center text-white/60 active:scale-95"><X size={16} /></button>
+                 <button onClick={() => stopRecording('deep')} className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95">DEEP</button>
+                 <button onClick={() => stopRecording('chipmunk')} className="w-10 h-10 bg-fuchsia-500 rounded-full flex items-center justify-center text-white text-[8px] font-black active:scale-95">FUN</button>
+                 <button onClick={() => stopRecording()} className="w-11 h-11 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-lg"><Send size={18} /></button>
+              </div>
+           ) : (
+             <motion.button layoutId="chat-primary-action" onClick={startRecording} className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"><Mic size={20} /></motion.button>
+           )}
+        </div>
+      </div>
+    </div>
+  </div>
+));

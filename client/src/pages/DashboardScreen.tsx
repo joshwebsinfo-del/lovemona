@@ -8,6 +8,30 @@ import { importPublicKey, deriveSharedSecret, decryptMessage, encryptMessage } f
 import { initSocket, getSocket } from '../lib/socket';
 import type { Partner, AuthConfig } from '../lib/types';
 
+// --- COUNTDOWN TICKER (Separated to prevent full-screen re-renders) ---
+const CountdownWidget = React.memo(({ target }: { target: number }) => {
+  const [now, setNow] = useState(Date.now());
+  
+  useEffect(() => {
+     const t = setInterval(() => setNow(Date.now()), 1000);
+     return () => clearInterval(t);
+  }, []);
+
+  const diff = Math.max(0, target - now);
+  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  const m = Math.floor(diff / 1000 / 60) % 60;
+
+  return (
+    <div className="flex flex-col items-center">
+      <span className="text-2xl font-black text-white px-2 tracking-tighter drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+        {d}d {h}h {m}m
+      </span>
+      <span className="text-[10px] text-primary/80 font-black uppercase tracking-[2px] mt-1">Anniversary</span>
+    </div>
+  );
+});
+
 // --- ROMANTIC FLOATING LIGHTS ---
 const RomanticAtmosphere: React.FC = React.memo(() => {
   return (
@@ -58,7 +82,6 @@ export const DashboardScreen = React.memo(() => {
   const [noteInput, setNoteInput] = useState('');
   const [vaultMemory, setVaultMemory] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(Date.now() + 86400000 * 5);
-  const [now, setNow] = useState(Date.now());
   const [myIdentity, setMyIdentity] = useState<any>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [scores, setScores] = useState<any[]>([]);
@@ -66,10 +89,6 @@ export const DashboardScreen = React.memo(() => {
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-     const t = setInterval(() => setNow(Date.now()), 1000);
-     return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -343,11 +362,6 @@ export const DashboardScreen = React.memo(() => {
       }
   };
 
-  // Time remaining calc
-  const diff = Math.max(0, countdown - now);
-  const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
-  const m = Math.floor(diff / 1000 / 60) % 60;
 
   const updateCountdown = async () => {
       const dateStr = prompt('Enter a special date (YYYY-MM-DD):', new Date(countdown).toISOString().split('T')[0]);
@@ -574,10 +588,7 @@ export const DashboardScreen = React.memo(() => {
                <div className="absolute -top-6 -right-6 opacity-[0.03] group-hover:rotate-[30deg] transition-transform duration-700">
                   <Clock size={100} />
                </div>
-               <div className="flex flex-col items-center">
-                  <span className="text-2xl font-black text-white px-2 tracking-tighter drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">{d}d {h}h {m}m</span>
-                  <span className="text-[10px] text-primary/80 font-black uppercase tracking-[2px] mt-1">Anniversary</span>
-               </div>
+               <CountdownWidget target={countdown} />
             </motion.button>
 
             {/* QUICK GAMES PORTAL */}
