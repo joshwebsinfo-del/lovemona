@@ -1275,8 +1275,11 @@ const ChatInput = React.memo(({
                  <button onClick={() => stopRecording()} className="w-11 h-11 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-lg"><Send size={18} /></button>
               </div>
            ) : (
-             <motion.button layoutId="chat-primary-action" onClick={startRecording} className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"><Mic size={20} /></motion.button>
+              <motion.button layoutId="chat-primary-action" onClick={startRecording} className="w-11 h-11 bg-white/5 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all active:scale-90"><Mic size={20} /></motion.button>
            )}
+        </div>
+      </div>
+    </div>
   </div>
 ));
 
