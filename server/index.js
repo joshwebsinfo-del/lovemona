@@ -65,12 +65,19 @@ async function sendPushNotification(userId, messageData) {
       const payload = JSON.stringify({
         title: messageData.title || 'New Match Message',
         body: messageData.body || 'You have a new encrypted message.',
-        icon: '/pwa-192x192.png',
+        icon: '/securelove-icon.png',
+        badge: '/securelove-icon.png',
         data: { url: '/' }
       });
 
-      await webpush.sendNotification(subData.subscription, payload);
-      console.log(`[push] Sent notification to ${userId}`);
+      const options = {
+        TTL: 86400, // 24 hours
+        urgency: 'high',
+        topic: 'messages'
+      };
+
+      await webpush.sendNotification(subData.subscription, payload, options);
+      console.log(`[push] Sent high-priority notification to ${userId}`);
     }
   } catch (error) {
     console.error(`[push] Error sending to ${userId}:`, error.message);

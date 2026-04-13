@@ -25,7 +25,7 @@ export default defineConfig({
       filename: 'sw.js',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png', 'securelove-icon.png'],
       manifest: {
         name: 'SecureLove – Private Messenger',
         short_name: 'SecureLove',
@@ -41,6 +41,12 @@ export default defineConfig({
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
+          },
+          {
+            src: 'securelove-icon.png',
+            sizes: '1024x1024',
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
             src: 'pwa-512x512.png',
