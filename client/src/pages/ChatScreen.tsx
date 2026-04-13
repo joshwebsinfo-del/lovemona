@@ -989,59 +989,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Render a single message
-  const renderMessageContent = (msgContent: string) => {
-    try {
-      const payload: ChatPayload = JSON.parse(msgContent);
-      if (payload.type === 'media') {
-         if (payload.mediaType === 'sticker') {
-            const isUrl = payload.mediaData?.startsWith('http');
-            return (
-               <div className="rounded-2xl overflow-hidden max-w-[150px] aspect-square flex items-center justify-center">
-                  {isUrl ? (
-                     <img src={payload.mediaData} className="w-full h-full object-contain" />
-                  ) : (
-                     <span style={{ fontSize: '100px' }}>{payload.mediaData}</span>
-                  )}
-               </div>
-            );
-         }
-         return <MediaWrapper 
-           pl={payload} 
-           sharedKey={sharedKey} 
-           setViewMedia={setViewMedia} 
-           startAudioAnalysis={startAudioAnalysis} 
-           stopAudioAnalysis={stopAudioAnalysis} 
-         />;
-       }
-       if (payload.type === 'location' && payload.lat != null && payload.lng != null) {
-        return (
-          <div className="flex flex-col space-y-1.5 w-[240px]">
-            <p className="text-[13px] font-bold text-white mb-0.5 tracking-tight flex items-center">
-               <MapPin size={14} className="text-primary mr-1.5 animate-pulse" /> 
-               📍 Live Location
-            </p>
-            <div className="rounded-2xl overflow-hidden shadow-2xl border border-white/10 h-44 w-full relative group cursor-pointer"
-                 onClick={() => setFullScreenMap({ lat: payload.lat!, lng: payload.lng! })}>
-               <iframe 
-                 src={`https://maps.google.com/maps?q=${payload.lat},${payload.lng}&t=k&z=17&output=embed`}
-                 className="w-full h-full pointer-events-none"
-                 style={{ border: 0 }}
-                 loading="lazy"
-               />
-               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
-                  <div className="flex items-center justify-between w-full">
-                     <span className="text-[10px] text-white/80 font-bold uppercase tracking-widest">Satellite View</span>
-                     <div className="bg-primary text-white rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest shadow-lg">
-                        Tap to Expand
-                     </div>
-                  </div>
-               </div>
-               <div className="absolute top-2 right-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full animate-ping" />
-                  <div className="w-3 h-3 bg-green-500 rounded-full absolute inset-0" />
-               </div>
-            </div>
+
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] relative overflow-hidden w-full">
       <LiveWallpaper type={wallpaper} audioLevel={audioLevel} />
