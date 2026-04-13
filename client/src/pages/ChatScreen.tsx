@@ -7,7 +7,7 @@ import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
-import EmojiPicker, { Theme, type EmojiClickData } from 'emoji-picker-react';
+import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { LiveWallpaper } from '../components/LiveWallpaper';
 
 interface ChatScreenProps {
@@ -543,21 +543,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     } catch { /* ignored */ }
   };
 
-  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-    if (!typingTimeoutRef.current) {
-        sendSecurePayload({ type: 'typing' });
-        typingTimeoutRef.current = setTimeout(() => { typingTimeoutRef.current = null; }, 5000) as any;
-    }
-  };
 
-  const handleMessageTap = async (msgId: string) => {
-    if (selectedMessageId === msgId) {
-        setSelectedMessageId(null);
-    } else {
-        setSelectedMessageId(msgId);
-    }
-  };
 
   const sendReaction = async (msgId: string, emoji: string) => {
       setSelectedMessageId(null);
@@ -1020,8 +1006,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar">
         {messages.map((msg, i) => (
             <MessageBubble 
-              key={msg.id} msg={msg} i={i} isMe={msg.senderId === myUserId}
-              showTail={i === messages.length - 1 || messages[i + 1].senderId !== msg.senderId}
+              key={msg.id} msg={msg} isMe={msg.senderId === myUserId}
               isNew={i >= messages.length - 3} selectedMessageId={selectedMessageId}
               isBlurred={isBlurred} handleMessageTap={handleMessageTap} sendReaction={sendReaction}
               setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId}
@@ -1096,7 +1081,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 // --- SUB-COMPONENTS (Memoized for speed & re-render isolation) ---
 
 const MessageBubble = React.memo(({ 
-  msg, i, isMe, showTail, isNew, selectedMessageId, isBlurred, handleMessageTap, 
+  msg, isMe, isNew, selectedMessageId, isBlurred, handleMessageTap, 
   sendReaction, setReplyingTo, setSelectedMessageId, sharedKey, setViewMedia, 
   setFullScreenMap, startAudioAnalysis, stopAudioAnalysis 
 }: any) => {
