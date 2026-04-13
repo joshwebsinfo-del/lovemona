@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, Video, Wand2, PhoneOff, Gamepad2 } from 'lucide-react';
+import { SwitchCamera, Video, Wand2, PhoneOff, Gamepad2 } from 'lucide-react';
 import './CallScreen.css';
 
 interface CallScreenProps {
@@ -297,7 +297,7 @@ export function CallScreen({
         <div className="call-screen__header">
           <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
           <div style={{ display: 'flex', gap: '15px' }}>
-             <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><Camera size={20} /></button>
+             <button className="call-screen__icon-btn" onClick={onToggleCamera} aria-label="Flip Camera"><SwitchCamera size={20} /></button>
              <button className="call-screen__icon-btn" onClick={() => { setShowFilters(!showFilters); setShowGames(false); }} aria-label="Filters"><Wand2 size={20} /></button>
           </div>
         </div>

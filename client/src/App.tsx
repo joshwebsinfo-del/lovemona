@@ -361,13 +361,13 @@ const AppContent = () => {
       }
       const newVideoTrack = newStream.getVideoTracks()[0];
 
+      const oldTrack = localStreamRef.current?.getVideoTracks()[0] || null;
+      
       if (!localStreamRef.current) {
          localStreamRef.current = new MediaStream([newVideoTrack]);
       } else {
-         const oldTrack = localStreamRef.current.getVideoTracks()[0];
          if (oldTrack) {
             localStreamRef.current.removeTrack(oldTrack);
-            oldTrack.stop();
          }
          localStreamRef.current.addTrack(newVideoTrack);
       }
@@ -376,9 +376,15 @@ const AppContent = () => {
       
       if (pcRef.current) {
          const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
-         if (sender) sender.replaceTrack(newVideoTrack);
-         else pcRef.current.addTrack(newVideoTrack, localStreamRef.current);
+         if (sender) {
+            await sender.replaceTrack(newVideoTrack);
+         } else {
+            pcRef.current.addTrack(newVideoTrack, localStreamRef.current);
+         }
       }
+      
+      if (oldTrack) oldTrack.stop();
+      
       return newVideoTrack;
     } catch (e) {
       console.warn("Failed to acquire video track", e);

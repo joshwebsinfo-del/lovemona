@@ -264,6 +264,26 @@ export const DashboardScreen = React.memo(() => {
                </div>
             </motion.button>
 
+            {/* CALL QUICK ACTIONS */}
+            <motion.button 
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
+               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'voice' } }))}
+               className="h-24 col-span-1 rounded-[32px] bg-sky-500 text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group"
+            >
+               <Phone size={28} fill="currentColor" className="mb-2 group-hover:scale-110 transition-transform" />
+               <span className="text-[10px] font-black uppercase tracking-wider">Voice</span>
+            </motion.button>
+            <motion.button 
+               whileHover={{ y: -2 }}
+               whileTap={{ scale: 0.98 }}
+               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }))}
+               className="h-24 col-span-1 rounded-[32px] bg-primary text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group"
+            >
+               <Video size={28} fill="currentColor" className="mb-2 group-hover:scale-110 transition-transform" />
+               <span className="text-[10px] font-black uppercase tracking-wider">Video</span>
+            </motion.button>
+
             <motion.button 
                whileHover={{ y: -2 }}
                whileTap={{ scale: 0.98 }}
@@ -300,24 +320,6 @@ export const DashboardScreen = React.memo(() => {
                   </h3>
                   <p className={`text-[9px] uppercase font-bold tracking-wider ${isTugging ? 'text-white/60' : 'text-white/30'}`}>Presence</p>
                </div>
-            </motion.button>
-
-            {/* CALL QUICK ACTIONS */}
-            <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
-               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'voice' } }))}
-               className="h-20 col-span-1 rounded-[28px] bg-sky-500 text-white flex items-center justify-center shadow-lg active:scale-95"
-            >
-               <Phone size={24} fill="white" />
-            </motion.button>
-            <motion.button 
-               whileHover={{ y: -2 }}
-               whileTap={{ scale: 0.98 }}
-               onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }))}
-               className="h-20 col-span-1 rounded-[28px] bg-primary text-white flex items-center justify-center shadow-lg active:scale-95"
-            >
-               <Video size={24} fill="white" />
             </motion.button>
          </div>
 
