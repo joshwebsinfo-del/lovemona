@@ -586,6 +586,38 @@ const AppContent = () => {
     }
   };
 
+  const handleGameWin = async (gameType: string) => {
+     if (!partner || !sharedKey) return;
+     try {
+       const db = await initDB();
+       const identity = await db.get('identity', 'me');
+       if (!identity) return;
+
+       // Quick local notification
+       if ('vibrate' in navigator) navigator.vibrate([100, 50, 200]);
+
+       // Upsert win
+       const { data: items } = await supabase.from('leaderboard')
+         .select('*')
+         .eq('owner_id', identity.userId)
+         .eq('game_type', gameType);
+       
+       const existing = items?.[0];
+       if (existing) {
+          await supabase.from('leaderboard').update({ total_wins: existing.total_wins + 1, updated_at: Date.now() }).eq('id', existing.id);
+       } else {
+          await supabase.from('leaderboard').insert([{
+             id: `win_${identity.userId}_${gameType}_${Date.now()}`,
+             owner_id: identity.userId,
+             partner_id: partner.userId,
+             game_type: gameType,
+             total_wins: 1,
+             updated_at: Date.now()
+          }]);
+       }
+     } catch(e) { console.warn("Score update failed", e); }
+  };
+
   const handleUnlock = (pin: string) => {
     if (!appConfig) return;
     navigator.mediaDevices?.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
@@ -626,6 +658,7 @@ const AppContent = () => {
           onUpgradeDecline={handleUpgradeDecline}
           lastIncomingGameEvent={lastIncomingGameEvent}
           onSendGameEvent={handleGameEventSend}
+          onGameWin={handleGameWin}
         />
       </>
     );

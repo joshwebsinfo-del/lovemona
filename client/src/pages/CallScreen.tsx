@@ -26,6 +26,7 @@ interface CallScreenProps {
   onUpgradeDecline: () => void;
   lastIncomingGameEvent: any;
   onSendGameEvent: (payload: any) => void;
+  onGameWin?: (game: string) => void;
 }
 
 const GAME_REACTION = 'reaction';
@@ -87,12 +88,14 @@ export function CallScreen({
   onUpgradeDecline,
   lastIncomingGameEvent,
   onSendGameEvent,
+  onGameWin,
 }: CallScreenProps) {
   const [showFilters, setShowFilters] = useState(false);
   const [showGames, setShowGames] = useState(false);
   
   const [activeGame, setActiveGame] = useState<string | null>(null);
   const [isGameHost, setIsGameHost] = useState(false);
+  const [isGameReady, setIsGameReady] = useState(false); // New state for "Press Start" phase
 
   // Reaction State
   const [rrTarget, setRrTarget] = useState<string | null>(null);
@@ -147,6 +150,12 @@ export function CallScreen({
           setJigImg(evt.img);
           setJigState(evt.state);
        }
+       setIsGameReady(false); // Reset ready on new game
+       return;
+    }
+
+    if (evt.action === 'ready_sync') {
+       setIsGameReady(true);
        return;
     }
 
@@ -157,11 +166,12 @@ export function CallScreen({
        setRrTarget(null); 
     } 
     // Stare Logic
-    else if (evt.action === 'stare_lost') {
-       alert('You Win! Your partner blinked or looked away!');
-       setActiveGame(null);
-    }
-    // Categories Logic
+     if (evt.action === 'stare_lost') {
+        alert('You Won! Your partner blinked!');
+        setActiveGame(null);
+        if (onGameWin) onGameWin(GAME_STARE);
+        return;
+     }// Categories Logic
     else if (evt.action === 'cat_buzz') {
        if (evt.scored) setCatScore(prev => ({ ...prev, partner: prev.partner + 1 }));
        setCatPrompt({ cat: evt.cat, letter: evt.letter });
@@ -176,7 +186,7 @@ export function CallScreen({
   // ── Reaction Game Host Tick ──
   useEffect(() => {
      let timer: any;
-     if (activeGame === GAME_REACTION && isGameHost && !rrTarget) {
+     if (activeGame === GAME_REACTION && isGameHost && !rrTarget && isGameReady) {
         timer = setTimeout(() => {
            const emoji = REACTION_EMOJIS[Math.floor(Math.random() * REACTION_EMOJIS.length)];
            setRrTarget(emoji);
@@ -184,21 +194,21 @@ export function CallScreen({
         }, Math.random() * 2000 + 1000); 
      }
      return () => clearTimeout(timer);
-  }, [activeGame, isGameHost, rrTarget]);
+  }, [activeGame, isGameHost, rrTarget, isGameReady]);
 
   // ── Stare Timer Tick ──
   useEffect(() => {
       let timer: any;
-      if (activeGame === GAME_STARE) {
+      if (activeGame === GAME_STARE && isGameReady) {
           timer = setInterval(() => setStareTimer(t => t + 1), 1000);
       }
-      return () => clearInterval(timer);
-  }, [activeGame]);
+      return () => clearTimeout(timer);
+  }, [activeGame, isGameReady]);
 
   // ── Categories Auto Buzzer (Timer) Tick ──
   useEffect(() => {
       let timer: any;
-      if (activeGame === GAME_CATEGORIES) {
+      if (activeGame === GAME_CATEGORIES && isGameReady) {
           timer = setInterval(() => {
               setCatTimer(prev => {
                   if (prev <= 1) {
@@ -214,8 +224,8 @@ export function CallScreen({
               });
           }, 1000);
       }
-      return () => clearInterval(timer);
-  }, [activeGame, isGameHost, onSendGameEvent]);
+      return () => clearTimeout(timer);
+  }, [activeGame, isGameHost, onSendGameEvent, isGameReady]);
 
   const handleStartGame = (gameType: string) => {
      setActiveGame(gameType);
@@ -279,7 +289,12 @@ export function CallScreen({
       setCatPrompt({ cat: c, letter: l });
       setCatTimer(10);
       onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l, scored: true });
-      if (myScore >= 5) { alert('You won Categories Quick Fire!'); setActiveGame(null); onSendGameEvent({action:'end'}); }
+      if (myScore >= 5) { 
+          alert('You won Categories Quick Fire!'); 
+          setActiveGame(null); 
+          onSendGameEvent({action:'end'}); 
+          if (onGameWin) onGameWin(activeGame || 'categories');
+       }
   };
 
   const executeReact = (emoji: string) => {
@@ -295,6 +310,7 @@ export function CallScreen({
             alert('You Won Reaction Roulette!');
             setActiveGame(null);
             onSendGameEvent({ action: 'end' });
+            if (onGameWin) onGameWin(activeGame || 'reaction');
          }
       }
   };
@@ -458,6 +474,31 @@ export function CallScreen({
               <button onClick={() => { if(callType === 'game') onEndCall(); else { setActiveGame(null); onSendGameEvent({ action: 'end' }); } }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>Quit Match</button>
            </div>
         )}
+         
+         {/* READY OVERLAY */}
+         {activeGame && !isGameReady && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 60, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
+               <div className="w-20 h-20 bg-secondary/20 rounded-full flex items-center justify-center mb-6 animate-bounce">
+                  <Gamepad2 className="text-secondary" size={40} />
+               </div>
+               <h2 className="text-white text-3xl font-black italic tracking-tighter mb-2 uppercase">{activeGame.replace('_', ' ')}</h2>
+               <p className="text-white/40 text-[10px] font-black tracking-[0.3em] mb-12 uppercase">Synchronization Required</p>
+               
+               <button 
+                  onClick={() => { setIsGameReady(true); onSendGameEvent({ action: 'ready_sync' }); }}
+                  className="bg-secondary text-black px-12 py-5 rounded-3xl font-black text-xl tracking-tighter hover:scale-110 active:scale-95 transition-all shadow-[0_0_50px_rgba(234,179,8,0.4)]"
+               >
+                  READY / START
+               </button>
+               
+               <button 
+                  onClick={() => { setActiveGame(null); onSendGameEvent({action:'end'}); }}
+                  className="mt-12 text-white/20 hover:text-red-500 text-[10px] font-black tracking-widest uppercase transition-colors"
+               >
+                  Cancel Match
+               </button>
+            </div>
+         )}
 
         {/* GAME: SOUL STARE */}
         {activeGame === GAME_STARE && (

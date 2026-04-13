@@ -61,6 +61,7 @@ export const DashboardScreen = React.memo(() => {
   const [now, setNow] = useState(Date.now());
   const [myIdentity, setMyIdentity] = useState<any>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  const [scores, setScores] = useState<any[]>([]);
   
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,8 +151,8 @@ export const DashboardScreen = React.memo(() => {
                     const db2 = await initDB();
                     await db2.put('settings', { id: 'sticky_note_partner', data: payload.text });
                  } else if (payload.type === 'text' || payload.type === 'media') {
-                   setUnreadCount(c => c + 1);
-                }
+                    setUnreadCount(c => c + 1);
+                 }
              } catch { /* ignored */ }
           };
 
@@ -222,12 +223,26 @@ export const DashboardScreen = React.memo(() => {
            };
            fetchCloudData();
 
-          return () => { 
-             s.off('message:receive', handleReceive); 
-             s.off('status:update', handleStatus); 
-             s.off('connect', doSubscribe);
-             supabase.removeChannel(channel);
-          };
+           const fetchScores = async () => {
+              const { data } = await supabase.from('leaderboard')
+                .select('*')
+                .or(`owner_id.eq.${identity.userId},partner_id.eq.${identity.userId}`);
+              if (data) setScores(data);
+           };
+           fetchScores();
+
+           // REALTIME LEADERBOARD
+           const scoreChannel = supabase.channel('leaderboard_sync')
+             .on('postgres_changes', { event: '*', schema: 'public', table: 'leaderboard' }, fetchScores)
+             .subscribe();
+
+           return () => { 
+              s.off('message:receive', handleReceive); 
+              s.off('status:update', handleStatus); 
+              s.off('connect', doSubscribe);
+              supabase.removeChannel(channel);
+              supabase.removeChannel(scoreChannel);
+           };
         } catch { /* ignored */ }
       }
     };
@@ -439,7 +454,7 @@ export const DashboardScreen = React.memo(() => {
       {/* ACTION TRAY - PREMIUM CARDS */}
       <div className="pb-32 px-6 flex flex-col space-y-4 z-20 flex-1 overflow-y-auto no-scrollbar pt-4">
          
-                  {/* STICKY NOTES BOARD */}
+         {/* STICKY NOTES BOARD */}
          <div className="grid grid-cols-2 gap-3 w-full relative z-20 mb-2">
             {/* My Note */}
             <div 
@@ -477,7 +492,7 @@ export const DashboardScreen = React.memo(() => {
             </div>
          )}
 
-<div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             {/* OUR WORLD */}
             <motion.button 
                whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
@@ -587,6 +602,52 @@ export const DashboardScreen = React.memo(() => {
                <Heart size={16} className={isTugging ? 'text-white animate-ping' : 'text-primary opacity-60'} />
                <span className={`text-[10px] uppercase font-black tracking-widest ${isTugging ? 'text-white' : 'text-white/60'}`}>Love Tap</span>
             </motion.button>
+         </div>
+
+         {/* LEADERBOARD WIDGET */}
+         <div className="mt-8 mb-12 bg-white/5 border border-white/10 rounded-[28px] p-6 backdrop-blur-md">
+            <div className="flex items-center justify-between mb-4">
+               <h3 className="text-white/60 text-[10px] font-black uppercase tracking-[3px]">Match Scoreboard</h3>
+               <span className="text-primary text-[10px] font-black uppercase tracking-widest">Live Updates</span>
+            </div>
+            
+            <div className="space-y-4">
+               {['Categories', 'Roulette', 'Stare', 'Jigsaw'].map(g => {
+                  const gameTypeMap: Record<string, string> = {
+                     'Categories': 'categories',
+                     'Roulette': 'reaction',
+                     'Stare': 'soul_stare',
+                     'Jigsaw': 'jigsaw'
+                  };
+                  const type = gameTypeMap[g];
+                  const myWins = scores.filter(s => s.owner_id === myIdentity?.userId && s.game_type === type).reduce((a,b) => a + b.total_wins, 0);
+                  const partnerWins = scores.filter(s => s.partner_id === myIdentity?.userId && s.game_type === type).reduce((a,b) => a + b.total_wins, 0);
+
+                  return (
+                     <div key={g} className="flex flex-col">
+                        <div className="flex justify-between items-end mb-2">
+                           <span className="text-white text-xs font-bold opacity-80">{g}</span>
+                           <div className="flex space-x-3 text-[10px] font-black">
+                              <span className="text-primary">Me: {myWins}</span>
+                              <span className="text-white/40">{partner?.nick}: {partnerWins}</span>
+                           </div>
+                        </div>
+                        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden flex">
+                           <motion.div 
+                              initial={{ width: 0 }} 
+                              animate={{ width: `${(myWins / (myWins + partnerWins + 0.001)) * 100}%` }}
+                              className="h-full bg-primary"
+                           />
+                           <motion.div 
+                              initial={{ width: 0 }} 
+                              animate={{ width: `${(partnerWins / (myWins + partnerWins + 0.001)) * 100}%` }}
+                              className="h-full bg-white/20"
+                           />
+                        </div>
+                     </div>
+                  );
+               })}
+            </div>
          </div>
 
          {/* INTERACTIVE MOOD DOTS */}

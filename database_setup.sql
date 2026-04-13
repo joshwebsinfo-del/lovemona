@@ -44,7 +44,17 @@ CREATE TABLE IF NOT EXISTS vault (
     timestamp BIGINT NOT NULL
 );
 
--- 5. Create Hub Sync table (for Sticky Notes, Moods, Countdowns)
+-- 5. Create Leaderboard table
+CREATE TABLE IF NOT EXISTS leaderboard (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    partner_id TEXT NOT NULL,
+    game_type TEXT NOT NULL,
+    total_wins INTEGER DEFAULT 0,
+    updated_at BIGINT NOT NULL
+);
+
+-- 6. Create Hub Sync table (for Sticky Notes, Moods, Countdowns)
 CREATE TABLE IF NOT EXISTS hub_sync (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
@@ -59,7 +69,7 @@ CREATE TABLE IF NOT EXISTS hub_sync (
 ALTER TABLE vault ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 
--- 5. Enable Realtime broadcasting
+-- 7. Enable Realtime broadcasting
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'messages') THEN
