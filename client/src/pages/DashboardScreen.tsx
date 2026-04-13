@@ -59,6 +59,7 @@ export const DashboardScreen = React.memo(() => {
   const [countdown, setCountdown] = useState<number>(Date.now() + 86400000 * 5);
   const [now, setNow] = useState(Date.now());
   const [myIdentity, setMyIdentity] = useState<any>(null);
+  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -114,6 +115,7 @@ export const DashboardScreen = React.memo(() => {
 
           const importedPartnerKey = await importPublicKey(p.publicKeyPem);
           const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
+          setSharedKey(key);
           
           const msgs = await db.getAll('messages') || [];
           const currentUnread = msgs.filter((m: {status: string, senderId: string}) => m.status === 'unread' && m.senderId === p.userId).length;
@@ -163,10 +165,62 @@ export const DashboardScreen = React.memo(() => {
           if (s.connected) doSubscribe();
           s.on('connect', doSubscribe);
 
+          // ── SUPABASE REALTIME SYNC ──
+          const channel = supabase
+            .channel('hub_realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hub_sync' }, async (payload) => {
+               const row = payload.new;
+               if (row.partner_id === identity.userId && sharedKey) {
+                  try {
+                     const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
+                     const data = JSON.parse(dec);
+                     if (row.type === 'note') {
+                        setStickyNote(data);
+                        const db2 = await initDB();
+                        await db2.put('settings', { id: 'sticky_note', data });
+                     } else if (row.type === 'mood') {
+                        setPartnerMood(data.mood);
+                     } else if (row.type === 'countdown') {
+                        setCountdown(data.target);
+                        const db2 = await initDB();
+                        await db2.put('settings', { id: 'countdown_target', data: data.target });
+                     }
+                  } catch(e) { console.error('Cloud Sync Decrypt Failed', e); }
+               }
+            })
+            .subscribe();
+
+          const fetchCloudData = async () => {
+             try {
+                const { data: rows } = await supabase
+                  .from('hub_sync')
+                  .select('*')
+                  .or(`and(owner_id.eq.${identity.userId},partner_id.eq.${p.userId}),and(owner_id.eq.${p.userId},partner_id.eq.${identity.userId})`)
+                  .order('updated_at', { ascending: false });
+                
+                if (rows && rows.length > 0 && sharedKey) {
+                   const processedTypes = new Set();
+                   for (const row of rows) {
+                      if (processedTypes.has(row.type)) continue;
+                      processedTypes.add(row.type);
+                      try {
+                         const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
+                         const parsed = JSON.parse(dec);
+                         if (row.type === 'note') setStickyNote(parsed);
+                         else if (row.type === 'mood' && row.owner_id === p.userId) setPartnerMood(parsed.mood);
+                         else if (row.type === 'countdown') setCountdown(parsed.target);
+                      } catch(e) {}
+                   }
+                }
+             } catch(e) {}
+          };
+          fetchCloudData();
+
           return () => { 
              s.off('message:receive', handleReceive); 
              s.off('status:update', handleStatus); 
              s.off('connect', doSubscribe);
+             supabase.removeChannel(channel);
           };
         } catch { /* ignored */ }
       }
@@ -211,24 +265,33 @@ export const DashboardScreen = React.memo(() => {
      await db.put('settings', { id: 'sticky_note', data });
      
      const s = getSocket();
-     if (s && myIdentity && partner) {
-         const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
-         const payload = { type: 'hub:note', text: data.text };
-         const enc = await encryptMessage(key, JSON.stringify(payload));
-         s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+     if (s && myIdentity && partner && sharedKey) {
+          const payload = { type: 'hub:note', text: data.text };
+          const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
+          s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+
+          // Cloud Sync (Persistent)
+          await supabase.from('hub_sync').insert([{
+             id: `note_${myIdentity.userId}_${Date.now()}`,
+             type: 'note',
+             owner_id: myIdentity.userId,
+             partner_id: partner.userId,
+             encrypted_payload: enc.encrypted,
+             iv: enc.iv,
+             updated_at: Date.now()
+          }]);
      }
   };
 
   const sendGameInvite = async () => {
      const s = getSocket();
-     if (s && myIdentity && partner) {
-         const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
-         const payload = { type: 'hub:game_invite', game: 'categories' };
-         const enc = await encryptMessage(key, JSON.stringify(payload));
-         s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
-         
-         // Start local side in game mode
-         window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'game', isGameMode: true, gameType: 'categories' } }));
+     if (s && myIdentity && partner && sharedKey) {
+          const payload = { type: 'hub:game_invite', game: 'categories' };
+          const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
+          s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+          
+          // Start local side in game mode
+          window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'game', isGameMode: true, gameType: 'categories' } }));
      }
   };
 
@@ -240,11 +303,23 @@ export const DashboardScreen = React.memo(() => {
       setPartnerMood(m);
       
       const s = getSocket();
-      if (s && myIdentity && partner) {
-          const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
+      if (s && myIdentity && partner && sharedKey) {
           const payload = { type: 'signal:mood', mood: m };
-          const enc = await encryptMessage(key, JSON.stringify(payload));
+          const enc = await encryptMessage(sharedKey, JSON.stringify(payload));
           s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+
+          // Cloud Sync
+          const cloudPayload = { mood: m };
+          const cloudEnc = await encryptMessage(sharedKey, JSON.stringify(cloudPayload));
+          await supabase.from('hub_sync').insert([{
+             id: `mood_${myIdentity.userId}_${Date.now()}`,
+             type: 'mood',
+             owner_id: myIdentity.userId,
+             partner_id: partner.userId,
+             encrypted_payload: cloudEnc.encrypted,
+             iv: cloudEnc.iv,
+             updated_at: Date.now()
+          }]);
       }
   };
 
@@ -256,12 +331,23 @@ export const DashboardScreen = React.memo(() => {
 
   const updateCountdown = async () => {
       const dateStr = prompt('Enter a special date (YYYY-MM-DD):', new Date(countdown).toISOString().split('T')[0]);
-      if (dateStr) {
+      if (dateStr && myIdentity && partner && sharedKey) {
           const newDate = new Date(dateStr).getTime();
           if (!isNaN(newDate)) {
               setCountdown(newDate);
               const db = await initDB();
               await db.put('settings', { id: 'countdown_target', data: newDate });
+
+              const enc = await encryptMessage(sharedKey, JSON.stringify({ target: newDate }));
+              await supabase.from('hub_sync').insert([{
+                  id: `countdown_${myIdentity.userId}_${Date.now()}`,
+                  type: 'countdown',
+                  owner_id: myIdentity.userId,
+                  partner_id: partner.userId,
+                  encrypted_payload: enc.encrypted,
+                  iv: enc.iv,
+                  updated_at: Date.now()
+              }]);
           }
       }
   };

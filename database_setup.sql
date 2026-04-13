@@ -44,6 +44,17 @@ CREATE TABLE IF NOT EXISTS vault (
     timestamp BIGINT NOT NULL
 );
 
+-- 5. Create Hub Sync table (for Sticky Notes, Moods, Countdowns)
+CREATE TABLE IF NOT EXISTS hub_sync (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    partner_id TEXT NOT NULL,
+    encrypted_payload TEXT NOT NULL,
+    iv TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
 -- Add missing columns if existing table
 ALTER TABLE vault ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
@@ -58,6 +69,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'vault') THEN
         EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE vault';
     END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'hub_sync') THEN
+        EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE hub_sync';
+    END IF;
 END $$;
 
 -- 6. GRANT full access to anon and authenticated roles
@@ -67,6 +82,7 @@ GRANT ALL ON users TO anon, authenticated;
 GRANT ALL ON partnerships TO anon, authenticated;
 GRANT ALL ON messages TO anon, authenticated;
 GRANT ALL ON vault TO anon, authenticated;
+GRANT ALL ON hub_sync TO anon, authenticated;
 
 -- 7. Enable RLS but add fully permissive policies for the anon role
 -- This ensures the Supabase client can read/write all rows freely.
@@ -85,6 +101,10 @@ CREATE POLICY "users_all_access" ON users FOR ALL USING (true) WITH CHECK (true)
 ALTER TABLE partnerships ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "partnerships_all_access" ON partnerships;
 CREATE POLICY "partnerships_all_access" ON partnerships FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE hub_sync ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "hub_sync_all_access" ON hub_sync;
+CREATE POLICY "hub_sync_all_access" ON hub_sync FOR ALL USING (true) WITH CHECK (true);
 
 -- 8. Create the Storage Bucket
 INSERT INTO storage.buckets (id, name, public) 
