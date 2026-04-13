@@ -400,10 +400,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
             if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
             
             if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
-              new Notification(partnerInfo.nick, {
-                body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`,
-                icon: partnerInfo.avatar || '/pwa-192x192.png',
-              });
+              if (navigator.serviceWorker) {
+                 navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification(partnerInfo.nick || 'SecureLove', {
+                       body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`,
+                       icon: partnerInfo.avatar || '/pwa-192x192.png',
+                       badge: '/icon.png',
+                       vibrate: [200, 100, 200],
+                       tag: 'chat',
+                       renotify: true
+                    });
+                 }).catch(() => {
+                    new Notification(partnerInfo.nick || 'SecureLove', { body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`, icon: partnerInfo.avatar || '/pwa-192x192.png' });
+                 });
+              } else {
+                 new Notification(partnerInfo.nick || 'SecureLove', { body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`, icon: partnerInfo.avatar || '/pwa-192x192.png' });
+              }
             }
           }
           

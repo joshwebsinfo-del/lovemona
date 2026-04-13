@@ -290,7 +290,23 @@ const AppContent = () => {
        if (callIncoming) {
           ringtoneSound.current?.play().catch(() => {});
           if ('Notification' in window && window.Notification && window.Notification.permission === 'granted') {
-             try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
+             if (navigator.serviceWorker) {
+                navigator.serviceWorker.ready.then(reg => {
+                   reg.showNotification('Incoming Secure Line', {
+                      body: 'Tap to Answer the Call',
+                      icon: '/pwa-192x192.png',
+                      badge: '/icon.png',
+                      tag: 'call',
+                      renotify: true,
+                      vibrate: [500, 250, 500, 250, 500, 250, 500],
+                      requireInteraction: true
+                   });
+                }).catch(() => {
+                   try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
+                });
+             } else {
+                try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
+             }
           }
        } else {
           ringtoneSound.current?.pause();
