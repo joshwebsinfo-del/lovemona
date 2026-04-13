@@ -371,7 +371,7 @@ const AppContent = () => {
 
   // ── WebRTC setup ──
   const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any, mode: 'user' | 'environment' = 'user') => {
-    iceCandidateQueue.current = [];
+    if (isInitiator) iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
           video: type === 'video' ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
@@ -390,8 +390,14 @@ const AppContent = () => {
        stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
        pc.ontrack = (e) => { 
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]; 
-          if (remoteAudioRef.current) remoteAudioRef.current.srcObject = e.streams[0]; 
+          if (remoteVideoRef.current) {
+             remoteVideoRef.current.srcObject = e.streams[0];
+             remoteVideoRef.current.play().catch(err => console.warn('Video play blocked:', err));
+          }
+          if (remoteAudioRef.current) {
+             remoteAudioRef.current.srcObject = e.streams[0]; 
+             remoteAudioRef.current.play().catch(err => console.warn('Audio play blocked:', err));
+          }
 
           // Mixed Recording Logic (High Quality)
           if (!callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
