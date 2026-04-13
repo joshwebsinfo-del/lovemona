@@ -129,6 +129,7 @@ const AppContent = () => {
 
   const location = useLocation();
   const navigate = useNavigate();
+  const { showNotification } = useNotifications();
 
   // ── Init ringtone ──
   useEffect(() => {
@@ -228,8 +229,6 @@ const AppContent = () => {
     if (!sharedKey) return;
     const s = getSocket();
     if (!s) return;
-
-    const { showNotification } = useNotifications();
 
     const handleReceive = async (data: any) => {
        try {
