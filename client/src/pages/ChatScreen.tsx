@@ -1051,8 +1051,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       <AnimatePresence>
         {fullScreenMap && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} 
-            className="fixed inset-0 z-[120] bg-black flex flex-col will-change-transform contain-strict" style={{ overscrollBehavior: 'none' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-[120] bg-black flex flex-col" style={{ overscrollBehavior: 'none' }}
           >
             <div className="absolute top-0 left-0 right-0 p-5 flex justify-between items-center z-10 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
                <div className="flex items-center space-x-3">
