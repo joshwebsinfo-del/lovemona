@@ -300,7 +300,7 @@ const AppContent = () => {
                       renotify: true,
                       vibrate: [500, 250, 500, 250, 500, 250, 500],
                       requireInteraction: true
-                   });
+                   } as any);
                 }).catch(() => {
                    try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
                 });

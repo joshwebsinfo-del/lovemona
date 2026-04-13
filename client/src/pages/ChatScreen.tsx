@@ -409,7 +409,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                        vibrate: [200, 100, 200],
                        tag: 'chat',
                        renotify: true
-                    });
+                    } as any);
                  }).catch(() => {
                     new Notification(partnerInfo.nick || 'SecureLove', { body: payload.type === 'text' ? payload.text : `Sent a ${payload.type}`, icon: partnerInfo.avatar || '/pwa-192x192.png' });
                  });
