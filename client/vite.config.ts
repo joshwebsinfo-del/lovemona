@@ -25,6 +25,16 @@ export default defineConfig({
       filename: 'sw.js',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      injectManifest: {
+        rollupOptions: {
+          output: {
+            format: 'es',
+            // Note: vite-plugin-pwa internally uses inlineDynamicImports: true
+            // To address the warning, we can try to override or just ignore if it's internal.
+            // Some versions of Vite/Rollup preferred codeSplitting: false
+          }
+        }
+      },
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
       manifest: {
         name: 'SecureLove – Private Messenger',
