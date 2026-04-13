@@ -154,10 +154,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   useEffect(() => {
     notificationSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
     notificationSound.current.volume = 0.5;
-    
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
   }, []);
   
   // MediaRecorder Refs

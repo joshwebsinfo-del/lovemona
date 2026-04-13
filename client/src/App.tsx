@@ -16,6 +16,7 @@ import type { AuthConfig, Partner } from './lib/types';
 import { initSocket, getSocket } from './lib/socket';
 import { supabase } from './lib/supabase';
 import { decryptMessage, encryptMessage, deriveSharedSecret, importPublicKey } from './lib/crypto';
+import { NotificationProvider, useNotifications } from './components/NotificationProvider';
 
 // ──────────────────────────────────────────────
 // Bottom navigation
@@ -200,11 +201,16 @@ const AppContent = () => {
        setCallPendingSdp(null);
     };
 
+    const handleNavToChat = () => {
+       navigate('/chat');
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('start-global-call', handleGlobalCallStart as any);
     window.addEventListener('incoming-game-invite', handleIncomingGameInvite as any);
+    window.addEventListener('nav-to-chat', handleNavToChat);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -212,6 +218,7 @@ const AppContent = () => {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('start-global-call', handleGlobalCallStart as any);
       window.removeEventListener('incoming-game-invite', handleIncomingGameInvite as any);
+      window.removeEventListener('nav-to-chat', handleNavToChat);
     };
   }, [partner, sharedKey]);
 
@@ -220,6 +227,8 @@ const AppContent = () => {
     if (!sharedKey) return;
     const s = getSocket();
     if (!s) return;
+
+    const { showNotification } = useNotifications();
 
     const handleReceive = async (data: any) => {
        try {
@@ -289,6 +298,21 @@ const AppContent = () => {
              setVideoUpgradeRequested(false);
           } else if (payload.type === 'call:game') {
              setLastIncomingGameEvent(payload.data);
+          }
+          
+          // Global Push Notification for Chat Messages
+          else if (payload.type === 'whisper' || !payload.type) {
+             const currentPath = window.location.pathname;
+             if (currentPath !== '/chat') {
+                showNotification({
+                   title: partner?.nick || 'Partner',
+                   message: payload.text || 'Sent you a whisper',
+                   type: 'message',
+                   avatar: partner?.avatar,
+                   action: () => window.dispatchEvent(new CustomEvent('nav-to-chat'))
+                });
+                if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+             }
           }
        } catch {}
     };
@@ -705,4 +729,12 @@ const AppContent = () => {
   );
 };
 
-export default function App() { return ( <Router><AppContent /></Router> ); }
+export default function App() { 
+  return ( 
+    <NotificationProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </NotificationProvider> 
+  ); 
+}
