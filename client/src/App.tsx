@@ -96,7 +96,7 @@ const AppContent = () => {
   
   // ── Call State ──
   const [callActive, setCallActive] = useState(false);
-  const [callType, setCallType] = useState<'video' | 'voice'>('video');
+  const [callType, setCallType] = useState<'video' | 'voice' | 'game'>('video');
   const [callIncoming, setCallIncoming] = useState(false);
   const [callConnected, setCallConnected] = useState(false);
   const [callPendingSdp, setCallPendingSdp] = useState<any>(null);
@@ -176,10 +176,10 @@ const AppContent = () => {
     const handleFocus = () => setIsBlurred(false);
 
     const handleGlobalCallStart = (e: CustomEvent) => {
-       const { type } = e.detail;
+       const { type, isGameMode } = e.detail;
        if (!partner || !sharedKey) return;
        setCallActive(true);
-       setCallType(type || 'video');
+       setCallType(isGameMode ? 'game' : (type || 'video'));
        setCallIncoming(false);
        setCallConnected(false);
        setCallPendingSdp(null);
@@ -188,7 +188,7 @@ const AppContent = () => {
        setRemoteFilter('none');
        setVideoUpgradeRequested(false);
        setLastIncomingGameEvent(null);
-       setupWebRTC(type || 'video', true, undefined, 'user');
+       setupWebRTC(isGameMode ? 'game' : (type || 'video'), true, undefined, 'user');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -238,6 +238,9 @@ const AppContent = () => {
                setLocalFilterIndex(0);
                setRemoteFilter('none');
                setVideoUpgradeRequested(false);
+               if (payload.callType === 'game') {
+                   if ('vibrate' in navigator) navigator.vibrate([100, 50, 100, 50, 100]);
+               }
              }
           } else if (payload.type === 'call:answer' && pcRef.current) {
              await pcRef.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
@@ -288,12 +291,12 @@ const AppContent = () => {
     if (callActive) {
        if ('wakeLock' in navigator) (navigator as any).wakeLock.request('screen').then((lock: any) => { wakeLockRef.current = lock; }).catch(() => {});
        if (callIncoming) {
-          ringtoneSound.current?.play().catch(() => {});
+          if (callType !== 'game') ringtoneSound.current?.play().catch(() => {});
           if ('Notification' in window && window.Notification && window.Notification.permission === 'granted') {
              if (navigator.serviceWorker) {
                 navigator.serviceWorker.ready.then(reg => {
-                   reg.showNotification('Incoming Secure Line', {
-                      body: 'Tap to Answer the Call',
+                   reg.showNotification(callType === 'game' ? 'New Game Challenge!' : 'Incoming Secure Line', {
+                      body: callType === 'game' ? `${partner?.nick} wants to play a game` : 'Tap to Answer the Call',
                       icon: '/pwa-192x192.png',
                       badge: '/icon.png',
                       tag: 'call',
@@ -302,10 +305,10 @@ const AppContent = () => {
                       requireInteraction: true
                    } as any);
                 }).catch(() => {
-                   try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
+                   try { new window.Notification(callType === 'game' ? 'Game Challenge!' : 'Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
                 });
              } else {
-                try { new window.Notification('Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
+                try { new window.Notification(callType === 'game' ? 'Game Challenge!' : 'Incoming Secure Line', { body: 'Tap to answer', tag: 'call', requireInteraction: true } as any); } catch(e) {}
              }
           }
        } else {
@@ -348,7 +351,7 @@ const AppContent = () => {
   // ── Camera management ──
   const acquireVideoTrack = async (mode: 'user' | 'environment') => {
     try {
-      // Prioritize strict exact lens transition for mobile, fallback to soft constraint
+      if (callType === 'game') return null;
       let newStream;
       try {
           newStream = await navigator.mediaDevices.getUserMedia({ 
@@ -392,11 +395,11 @@ const AppContent = () => {
   };
 
   // ── WebRTC setup ──
-  const setupWebRTC = async (type: 'video' | 'voice', isInitiator: boolean, remoteSdp?: any, mode: 'user' | 'environment' = 'user') => {
+  const setupWebRTC = async (type: 'video' | 'voice' | 'game', isInitiator: boolean, remoteSdp?: any, mode: 'user' | 'environment' = 'user') => {
     if (isInitiator) iceCandidateQueue.current = [];
     try {
        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: type === 'video' ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
+          video: (type === 'video') ? { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } } : false, 
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
        });
        localStreamRef.current = stream;

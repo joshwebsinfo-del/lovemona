@@ -5,7 +5,7 @@ import './CallScreen.css';
 interface CallScreenProps {
   partnerName: string;
   avatarUrl: string;
-  callType: 'video' | 'voice';
+  callType: 'video' | 'voice' | 'game';
   incoming: boolean;
   connected: boolean;
   callDuration: number;
@@ -52,6 +52,16 @@ function formatCallTime(secs: number): string {
   const s = secs % 60;
   return `${m}:${s < 10 ? '0' : ''}${s}`;
 }
+
+const GameArenaBackdrop = () => (
+  <div className="absolute inset-0 z-0 overflow-hidden bg-black">
+    <div className="absolute inset-0 bg-gradient-to-br from-purple-900/40 via-black to-blue-900/40" />
+    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[200%] opacity-20">
+      <div className="w-full h-full" style={{ background: 'radial-gradient(circle, #3b82f6 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+    </div>
+    <div className="absolute inset-0 animate-pulse bg-purple-500/5 blur-[100px] rounded-full scale-150" />
+  </div>
+);
 
 export function CallScreen({
   partnerName,
@@ -102,8 +112,11 @@ export function CallScreen({
 
   useEffect(() => {
     document.body.classList.add('call-active');
+    if (callType === 'game' && connected && !activeGame && !lastIncomingGameEvent) {
+       handleStartGame(GAME_CATEGORIES);
+    }
     return () => { document.body.classList.remove('call-active'); };
-  }, []);
+  }, [callType, connected, activeGame, lastIncomingGameEvent]);
 
   // ── Unified Game Engine State Machine ──
   useEffect(() => {
@@ -293,7 +306,7 @@ export function CallScreen({
       <div className="call-screen__glow" />
 
       {/* Header Controls (Only when connected and in video) */}
-      {connected && callType === 'video' && !activeGame && (
+      {connected && !activeGame && callType !== 'game' && (
         <div className="call-screen__header">
           <button className="call-screen__icon-btn" onClick={() => { setShowGames(!showGames); setShowFilters(false); }} aria-label="Games"><Gamepad2 size={20} /></button>
           <div style={{ display: 'flex', gap: '15px' }}>
@@ -396,9 +409,10 @@ export function CallScreen({
       </div>
 
       {/* Media Layer (Always Mounted for WebRTC consistency) */}
-      <div className="call-screen__video-layer" style={{ opacity: (callType === 'video' && connected) ? 1 : 0, pointerEvents: (callType === 'video' && connected) ? 'auto' : 'none', zIndex: (callType === 'video' && connected) ? 10 : -10 }}>
-        <video ref={remoteVideoRef} autoPlay playsInline className="call-screen__video-remote" style={{ filter: remoteFilter !== 'none' ? remoteFilter : 'none' }} />
-        <video ref={localVideoRef} autoPlay playsInline muted className="call-screen__video-local" style={{ filter: localFilter !== 'none' ? localFilter : 'none' }} />
+      <div className="call-screen__video-layer" style={{ opacity: (callType !== 'voice' && connected) ? 1 : 0, pointerEvents: (callType !== 'voice' && connected) ? 'auto' : 'none', zIndex: (callType !== 'voice' && connected) ? 10 : -10 }}>
+        {callType === 'game' && <GameArenaBackdrop />}
+        <video ref={remoteVideoRef} autoPlay playsInline className="call-screen__video-remote" style={{ filter: remoteFilter !== 'none' ? remoteFilter : 'none', opacity: callType === 'game' ? 0.3 : 1 }} />
+        <video ref={localVideoRef} autoPlay playsInline muted className="call-screen__video-local" style={{ filter: localFilter !== 'none' ? localFilter : 'none', opacity: callType === 'game' ? 0.3 : 1 }} />
         
         {/* GAME: REACTION ROULETTE */}
         {activeGame === GAME_REACTION && (
@@ -413,7 +427,7 @@ export function CallScreen({
                     <div style={{ width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.2)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                  )}
               </div>
-              <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>Quit Match</button>
+              <button onClick={() => { if(callType === 'game') onEndCall(); else { setActiveGame(null); onSendGameEvent({ action: 'end' }); } }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '20px', fontWeight: 'bold' }}>Quit Match</button>
            </div>
         )}
 
@@ -422,7 +436,7 @@ export function CallScreen({
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 50, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(3px)' }}>
                 <h2 style={{ fontSize: '24px', letterSpacing: '4px', textTransform:'uppercase', color:'white', textShadow:'0 2px 10px black' }}>Soul Stare</h2>
                 <div style={{ fontSize: '80px', fontWeight: '900', margin: '40px 0', color: 'white', textShadow:'0 4px 20px black' }}>{formatCallTime(stareTimer)}</div>
-                <button onClick={() => { onSendGameEvent({ action: 'stare_lost' }); alert('You Lost! You broke eye contact!'); setActiveGame(null); }} style={{ padding: '20px 40px', background: '#ef4444', borderRadius: '30px', fontWeight: 'bold', color: 'white', fontSize:'18px' }}>I BLINKED / LOST</button>
+                <button onClick={() => { onSendGameEvent({ action: 'stare_lost' }); alert('You Lost! You broke eye contact!'); if(callType === 'game') onEndCall(); else setActiveGame(null); }} style={{ padding: '20px 40px', background: '#ef4444', borderRadius: '30px', fontWeight: 'bold', color: 'white', fontSize:'18px' }}>I BLINKED / LOST</button>
             </div>
         )}
 
@@ -436,7 +450,7 @@ export function CallScreen({
                     <div style={{ fontSize: '32px', fontWeight: '900', color: 'white', textShadow: '0 2px 10px black', textTransform: 'uppercase', letterSpacing: '2px' }}>{catPrompt.cat}</div>
                 </div>
                 <button onClick={handleBuzzer} style={{ width: '120px', height: '120px', background: '#ef4444', borderRadius: '50%', border: '8px solid #b91c1c', marginTop: '40px', fontSize: '20px', color: 'white', fontWeight: '900', boxShadow: '0 10px 40px rgba(239,68,68,0.5)', transition: 'transform 0.1s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.9)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>BUZZER</button>
-                <button onClick={() => { setActiveGame(null); onSendGameEvent({ action: 'end' }); }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '30px', fontWeight: 'bold', fontSize:'14px' }}>Quit</button>
+                <button onClick={() => { if(callType === 'game') onEndCall(); else { setActiveGame(null); onSendGameEvent({ action: 'end' }); } }} style={{ background: 'transparent', border: 'none', color: '#ef4444', marginTop: '30px', fontWeight: 'bold', fontSize:'14px' }}>Quit</button>
             </div>
         )}
 

@@ -136,13 +136,19 @@ export const DashboardScreen = React.memo(() => {
                    tugRef.current = setTimeout(() => setIsTugging(false), 5000);
                 } else if (payload.type === 'signal:mood') {
                    setPartnerMood(payload.mood);
+                } else if (payload.type === 'hub:game_invite') {
+                   window.dispatchEvent(new CustomEvent('start-global-call', { 
+                      detail: { 
+                        type: 'game', 
+                        isGameMode: true, 
+                        gameType: payload.game || 'categories' 
+                      } 
+                   }));
                 } else if (payload.type === 'hub:note') {
                    const data = { text: payload.text, sender: 'partner' };
                    setStickyNote(data);
                    const db2 = await initDB();
                    await db2.put('settings', { id: 'sticky_note', data });
-                } else if (payload.type === 'hub:game_invite') {
-                   window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video', initGame: payload.game } }));
                 } else if (payload.type === 'text' || payload.type === 'media') {
                    setUnreadCount(c => c + 1);
                 }
@@ -214,13 +220,15 @@ export const DashboardScreen = React.memo(() => {
   };
 
   const sendGameInvite = async () => {
-     window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }));
      const s = getSocket();
      if (s && myIdentity && partner) {
          const key = await deriveSharedSecret(myIdentity.privateKey, await importPublicKey(partner.publicKeyPem));
-         const payload = { type: 'hub:game_invite', game: 'start' };
+         const payload = { type: 'hub:game_invite', game: 'categories' };
          const enc = await encryptMessage(key, JSON.stringify(payload));
          s.emit('message:send', { to: partner.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: myIdentity.userId });
+         
+         // Start local side in game mode
+         window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'game', isGameMode: true, gameType: 'categories' } }));
      }
   };
 
