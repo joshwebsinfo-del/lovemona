@@ -65,6 +65,13 @@ CREATE TABLE IF NOT EXISTS hub_sync (
     updated_at BIGINT NOT NULL
 );
 
+-- 7. Create Push Subscriptions table
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    user_id TEXT PRIMARY KEY,
+    subscription JSONB NOT NULL,
+    created_at BIGINT NOT NULL
+);
+
 -- Add missing columns if existing table
 ALTER TABLE vault ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS iv TEXT NOT NULL DEFAULT '';
@@ -93,6 +100,7 @@ GRANT ALL ON partnerships TO anon, authenticated;
 GRANT ALL ON messages TO anon, authenticated;
 GRANT ALL ON vault TO anon, authenticated;
 GRANT ALL ON hub_sync TO anon, authenticated;
+GRANT ALL ON push_subscriptions TO anon, authenticated;
 
 -- 7. Enable RLS but add fully permissive policies for the anon role
 -- This ensures the Supabase client can read/write all rows freely.
@@ -115,6 +123,10 @@ CREATE POLICY "partnerships_all_access" ON partnerships FOR ALL USING (true) WIT
 ALTER TABLE hub_sync ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "hub_sync_all_access" ON hub_sync;
 CREATE POLICY "hub_sync_all_access" ON hub_sync FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "push_all_access" ON push_subscriptions;
+CREATE POLICY "push_all_access" ON push_subscriptions FOR ALL USING (true) WITH CHECK (true);
 
 -- 8. Create the Storage Bucket
 INSERT INTO storage.buckets (id, name, public) 

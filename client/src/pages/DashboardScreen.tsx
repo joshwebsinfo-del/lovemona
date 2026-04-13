@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video, Gamepad2, Edit3, Clock, Image as ImageIcon } from 'lucide-react';
+import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video, Gamepad2, Edit3, Clock, Image as ImageIcon, Bell } from 'lucide-react';
+import { useNotifications } from '../components/NotificationProvider';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, decryptMessage, encryptMessage } from '../lib/crypto';
@@ -85,6 +86,9 @@ export const DashboardScreen = React.memo(() => {
   const [myIdentity, setMyIdentity] = useState<any>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [scores, setScores] = useState<any[]>([]);
+  const [showPushBanner, setShowPushBanner] = useState(false);
+  
+  const { subscribeToPush, isPushSupported } = useNotifications();
   
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -281,6 +285,11 @@ export const DashboardScreen = React.memo(() => {
        }
     }, 15000);
 
+    // Check for push permission
+    if ('Notification' in window && Notification.permission !== 'granted') {
+       setShowPushBanner(true);
+    }
+
     return () => {
        clearInterval(interval);
        clearInterval(memoryInterval);
@@ -390,6 +399,47 @@ export const DashboardScreen = React.memo(() => {
     <div className={`flex flex-col h-full bg-[#050505] relative overflow-hidden transition-all duration-1000 bg-gradient-to-b ${getMoodGradient()}`}>
       
       <RomanticAtmosphere />
+
+      {/* PUSH NOTIFICATION BANNER */}
+      <AnimatePresence>
+        {showPushBanner && isPushSupported && (
+          <motion.div 
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className="fixed top-24 left-6 right-6 z-[100] bg-primary/20 backdrop-blur-3xl border border-primary/30 rounded-3xl p-5 shadow-2xl flex items-center justify-between"
+          >
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg animate-pulse">
+                <Bell size={24} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-black text-xs uppercase tracking-widest">Notification Access</span>
+                <span className="text-white/60 text-[10px] font-medium uppercase tracking-wider">Stay connected in your world</span>
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => setShowPushBanner(false)}
+                className="px-4 py-2 bg-white/5 rounded-xl text-[10px] font-black text-white/40 uppercase tracking-widest active:scale-95"
+              >
+                Later
+              </button>
+              <button 
+                onClick={async () => {
+                  if (myIdentity) {
+                    const success = await subscribeToPush(myIdentity.userId);
+                    if (success) setShowPushBanner(false);
+                  }
+                }}
+                className="px-6 py-2 bg-primary rounded-xl text-[10px] font-black text-white uppercase tracking-widest shadow-lg shadow-primary/40 active:scale-95"
+              >
+                Enable
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* COMPACT TOP BAR */}
       <div className="pt-12 px-8 flex justify-between items-center z-20">

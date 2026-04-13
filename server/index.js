@@ -4,11 +4,23 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 require('dotenv').config();
-
+const webpush = require('web-push');
+const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Initialize Supabase
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+// Initialize Web-Push
+webpush.setVapidDetails(
+  'mailto:support@securelove.app',
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, '../client/dist')));
@@ -24,6 +36,34 @@ const io = new Server(server, {
 // userId -> Set of socketId
 const users = new Map();
 const messageQueue = new Map(); // userId -> Array of messages
+
+async function sendPushNotification(userId, messageData) {
+  try {
+    const { data: subData } = await supabase
+      .from('push_subscriptions')
+      .select('subscription')
+      .eq('user_id', userId)
+      .single();
+
+    if (subData && subData.subscription) {
+      const payload = JSON.stringify({
+        title: messageData.title || 'New Match Message',
+        body: messageData.body || 'You have a new encrypted message.',
+        icon: '/pwa-192x192.png',
+        data: { url: '/' }
+      });
+
+      await webpush.sendNotification(subData.subscription, payload);
+      console.log(`[push] Sent notification to ${userId}`);
+    }
+  } catch (error) {
+    console.error(`[push] Error sending to ${userId}:`, error.message);
+    if (error.statusCode === 410 || error.statusCode === 404) {
+      // Subscription expired or no longer valid, delete it
+      await supabase.from('push_subscriptions').delete().eq('user_id', userId);
+    }
+  }
+}
 
 io.on('connection', (socket) => {
   const userId = socket.handshake.query.userId;
@@ -65,16 +105,22 @@ io.on('connection', (socket) => {
   });
 
   // ── MESSAGING ─────────────────────────────────────────────────────────────
-  socket.on('message:send', ({ to, encrypted, iv, senderId, messageId }) => {
+  socket.on('message:send', async ({ to, encrypted, iv, senderId, messageId }) => {
     const payload = { encrypted, iv, senderId, timestamp: Date.now(), messageId };
     
     if (users.has(to)) {
       // Emit to ALL sockets of that user
       io.to(to).emit('message:receive', payload);
     } else {
-      console.log(`[message] recipient ${to} offline. Queuing message.`);
+      console.log(`[message] recipient ${to} offline. Queuing and sending push.`);
       if (!messageQueue.has(to)) messageQueue.set(to, []);
       messageQueue.get(to).push(payload);
+      
+      // Trigger Web Push
+      sendPushNotification(to, { 
+        title: 'SecureLove', 
+        body: 'New message received in your private world.' 
+      });
     }
   });
 
@@ -98,6 +144,39 @@ io.on('connection', (socket) => {
       }
     }
   });
+});
+
+app.post('/api/push/subscribe', async (req, res) => {
+  const { userId, subscription } = req.body;
+  if (!userId || !subscription) return res.status(400).json({ error: 'Missing userId or subscription' });
+
+  try {
+    const { error } = await supabase.from('push_subscriptions').upsert({
+      user_id: userId,
+      subscription: subscription,
+      created_at: Date.now()
+    });
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[api] subscription error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test endpoint to trigger a push notification manually
+app.get('/api/push/test/:userId', async (req, res) => {
+  const { userId } = req.params;
+  try {
+    await sendPushNotification(userId, {
+      title: 'SecureLove Test',
+      body: 'This is a test notification from your world! ❤️'
+    });
+    res.json({ success: true, message: `Test push sent to ${userId}` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.get('/health', (req, res) => res.json({

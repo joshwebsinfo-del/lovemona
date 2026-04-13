@@ -16,7 +16,12 @@ interface Toast {
 interface NotificationContextType {
   showNotification: (params: Omit<Toast, 'id'>) => void;
   requestPermission: () => Promise<boolean>;
+  subscribeToPush: (userId: string) => Promise<boolean>;
+  sendTestPush: (userId: string) => Promise<void>;
+  isPushSupported: boolean;
 }
+
+const VAPID_PUBLIC_KEY = 'BGFQdFBv_xpe6nSmdZ7eEGtCIW8hJT_JudRtHfXca8QQPMgOn58gQbsc5-FNe4ibOmPk4H8PMgfbMuGduEN3eaI';
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
@@ -26,8 +31,20 @@ export const useNotifications = () => {
   return context;
 };
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [isPushSupported] = useState(() => 'serviceWorker' in navigator && 'PushManager' in window);
   const notificationSound = React.useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -43,6 +60,52 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return permission === 'granted';
   }, []);
 
+  const subscribeToPush = useCallback(async (userId: string) => {
+    if (!isPushSupported) return false;
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      
+      // Request permission first
+      const hasPermission = await requestPermission();
+      if (!hasPermission) return false;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+
+      // Send to server
+      const response = await fetch('/api/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, subscription })
+      });
+
+      if (!response.ok) throw new Error('Failed to save subscription');
+      
+      console.log('[push] Subscribed successfully');
+      return true;
+    } catch (error) {
+      console.error('[push] Subscription failed:', error);
+      return false;
+    }
+  }, [isPushSupported, requestPermission]);
+
+  const sendTestPush = useCallback(async (userId: string) => {
+    try {
+      const response = await fetch(`/api/push/test/${userId}`);
+      if (!response.ok) throw new Error('Test push failed');
+      showNotification({
+        title: 'System',
+        message: 'Test notification triggered!',
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('[push] Test failed:', error);
+    }
+  }, []);
+
   const showNotification = useCallback((params: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newToast = { ...params, id };
@@ -52,17 +115,31 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Play sound if system allows
     notificationSound.current?.play().catch(() => {});
 
-    // Browser Notification (Phase 2)
+    // Browser Notification (System-Level)
     if (Notification.permission === 'granted') {
-      try {
-        new Notification(params.title, {
+      const showSystemNotification = async (reg?: ServiceWorkerRegistration) => {
+        const options = {
           body: params.message,
           icon: params.avatar || '/pwa-192x192.png',
+          badge: '/icon.png',
           tag: params.type,
-          silent: true // App handles sound
-        });
-      } catch (e) {
-        console.warn('Local notification failed', e);
+          vibrate: [200, 100, 200],
+          requireInteraction: params.type === 'alert',
+          silent: false,
+          data: { url: window.location.href }
+        };
+
+        if (reg) {
+          reg.showNotification(params.title, options);
+        } else {
+          new Notification(params.title, options);
+        }
+      };
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(showSystemNotification).catch(() => showSystemNotification());
+      } else {
+        showSystemNotification();
       }
     }
 
@@ -73,7 +150,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ showNotification, requestPermission }}>
+    <NotificationContext.Provider value={{ showNotification, requestPermission, subscribeToPush, sendTestPush, isPushSupported }}>
       {children}
       
       {/* Toast Container */}

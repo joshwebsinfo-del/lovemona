@@ -20,7 +20,11 @@ export default defineConfig({
     react(),
     tailwind(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'icon.png'],
       manifest: {
         name: 'SecureLove – Private Messenger',

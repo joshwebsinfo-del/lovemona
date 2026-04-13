@@ -9,7 +9,7 @@ import { getSocket } from '../lib/socket';
 import { useNotifications } from '../components/NotificationProvider';
 
 export const SettingsScreen: React.FC = () => {
-  const { showNotification } = useNotifications();
+  const { showNotification, requestPermission, subscribeToPush, sendTestPush, isPushSupported } = useNotifications();
   const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
   const [avatar, setAvatar] = useState('');
