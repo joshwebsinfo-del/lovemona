@@ -6,6 +6,7 @@ import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
+import EmojiPicker, { Theme, type EmojiClickData } from 'emoji-picker-react';
 import { LiveWallpaper } from '../components/LiveWallpaper';
 
 interface ChatScreenProps {
@@ -137,8 +138,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [recordDuration, setRecordDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState('');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
-  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [replyingTo, setReplyingTo] = useState<any>(null);
   const [showStickers, setShowStickers] = useState(false);
+  const [stickerTab, setStickerTab] = useState<'3d' | 'classic' | 'bots'>('3d');
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -970,6 +972,18 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     try {
       const payload: ChatPayload = JSON.parse(msgContent);
       if (payload.type === 'media') {
+         if (payload.mediaType === 'sticker') {
+            const isUrl = payload.mediaData?.startsWith('http');
+            return (
+               <div className="rounded-2xl overflow-hidden max-w-[150px] aspect-square flex items-center justify-center">
+                  {isUrl ? (
+                     <img src={payload.mediaData} className="w-full h-full object-contain" />
+                  ) : (
+                     <span style={{ fontSize: '100px' }}>{payload.mediaData}</span>
+                  )}
+               </div>
+            );
+         }
          return <MediaWrapper 
            pl={payload} 
            sharedKey={sharedKey} 
@@ -1213,40 +1227,61 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
              )}
           </AnimatePresence>
 
-          <AnimatePresence>
-             {showStickers && (
-                <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[350px] backdrop-blur-3xl">
-                   <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
-                      <button className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-primary rounded-xl text-white">All Emojis</button>
-                      <button className="flex-1 py-2 text-[10px] font-black uppercase tracking-widest bg-white/5 rounded-xl text-white/40">Custom</button>
-                   </div>
-                   <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-4 no-scrollbar">
-                      {/* Premium 3D Styled Emojis */}
-                      {['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
-                         <div key={name} onClick={() => sendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
-                            <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" onError={(e) => (e.currentTarget.parentElement!.style.display = 'none')} />
-                         </div>
-                      ))}
-                      {/* Classic Bots */}
-                      {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
-                         <img key={seed} 
-                              onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
-                              src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
-                              className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
-                         />
-                      ))}
-                      {/* Expanded Pack */}
-                      {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                         <img key={n} 
-                              onClick={() => sendSticker(`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`)} 
-                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`} 
-                              className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
-                         />
-                      ))}
-                   </div>
-                </motion.div>
-             )}
-          </AnimatePresence>
+           <AnimatePresence>
+              {showStickers && (
+                 <motion.div initial={{y: 20, opacity: 0}} animate={{y: 0, opacity: 1}} exit={{y: 20, opacity: 0}} className="absolute bottom-16 left-0 bg-[#0a0a0c] border border-white/10 rounded-3xl shadow-2xl z-50 w-full overflow-hidden flex flex-col h-[400px] backdrop-blur-3xl">
+                    <div className="flex bg-white/5 p-2 space-x-2 border-b border-white/5">
+                       <button onClick={() => setStickerTab('3d')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === '3d' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>3D Emojis</button>
+                       <button onClick={() => setStickerTab('classic')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === 'classic' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>Classic</button>
+                       <button onClick={() => setStickerTab('bots')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${stickerTab === 'bots' ? 'bg-primary text-white' : 'bg-transparent text-white/40'}`}>Bots</button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto no-scrollbar">
+                       {stickerTab === 'classic' ? (
+                          <div className="h-full">
+                             <EmojiPicker 
+                                theme={Theme.DARK} 
+                                width="100%" 
+                                height="100%"
+                                searchDisabled={false}
+                                skinTonesDisabled={false}
+                                onEmojiClick={(emoji: EmojiClickData) => {
+                                   sendSticker(emoji.emoji); // Send the actual emoji string
+                                   setShowStickers(false);
+                                }}
+                             />
+                          </div>
+                       ) : (
+                          <div className="p-4 grid grid-cols-4 gap-4">
+                             {stickerTab === '3d' && ['grinning-face', 'smiling-face-with-heart-eyes', 'winking-face', 'face-with-tongue', 'zany-face', 'smirking-face', 'relieved-face', 'heart-decoration', 'fire', 'sparkles', 'collision', 'hundred-points', 'partying-face', 'clown-face', 'ghost', 'alien', 'robot', 'red-heart', 'purple-heart', 'kiss-mark', 'skull', 'poop', 'eyes', 'tongue'].map(name => (
+                                <div key={name} onClick={() => sendSticker(`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`)} className="aspect-square flex items-center justify-center bg-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-95 transition-transform p-1">
+                                   <img src={`https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}/3D/${name.split('-').map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join('%20')}_3d.png`} className="w-full h-full object-contain" onError={(e) => (e.currentTarget.parentElement!.style.display = 'none')} />
+                                </div>
+                             ))}
+                             {stickerTab === 'bots' && (
+                                <>
+                                   {['bear', 'cat', 'dog', 'bunny', 'fox', 'panda', 'koala', 'tiger', 'lion', 'racoon', 'monkey', 'penguin', 'robot', 'ghost', 'star', 'heart'].map(seed => (
+                                      <img key={seed} 
+                                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`)} 
+                                           src={`https://api.dicebear.com/7.x/bottts/svg?seed=${seed}&baseColor=eab308,ef4444,3b82f6`} 
+                                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
+                                      />
+                                   ))}
+                                   {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                                      <img key={n} 
+                                           onClick={() => sendSticker(`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`)} 
+                                           src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${n}&backgroundColor=transparent`} 
+                                           className="w-full h-auto bg-white/5 border border-white/5 rounded-2xl cursor-pointer hover:scale-110 active:scale-90 transition-transform p-1 shadow-md" 
+                                      />
+                                   ))}
+                                </>
+                             )}
+                          </div>
+                       )}
+                    </div>
+                 </motion.div>
+              )}
+           </AnimatePresence>
 
           {/* Integrated Input Pill */}
           <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
