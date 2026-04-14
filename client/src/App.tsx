@@ -157,6 +157,21 @@ const AppContent = () => {
              const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
              setSharedKey(key);
              initSocket(identity.userId);
+
+             // PARMANENT: Fetch profile from Cloud to restore Theme/Wallpaper if missing or updated
+             try {
+                const { data: profile } = await supabase.from('users').select('nickname, avatar, theme, wallpaper, imageUrl').eq('user_id', identity.userId).single();
+                if (profile) {
+                   const currentSettings = await db.get('settings', 'main') || { id: 'main' };
+                   const needsUpdate = !currentSettings.theme || currentSettings.theme !== profile.theme;
+                   if (needsUpdate) {
+                      const updatedSettings = { ...currentSettings, theme: profile.theme, wallpaper: profile.wallpaper, imageUrl: profile.imageUrl };
+                      await db.put('settings', updatedSettings);
+                      // Trigger visual update for background
+                      window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: profile.theme, imageUrl: profile.imageUrl } }));
+                   }
+                }
+             } catch(e) { console.warn('Cloud restore skipped:', e); }
           }
         }
       } catch (err) { console.error('Failed to load app config:', err); } finally { setIsLoading(false); }

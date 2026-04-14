@@ -18,6 +18,7 @@ export const SettingsScreen: React.FC = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [myId, setMyId] = useState('');
   const [partnerId, setPartnerId] = useState('');
+  const [syncTheme, setSyncTheme] = useState(true); // Unified Theme Experience
 
   const themes = [
     { id: 'passionate', label: 'Passionate', color: 'bg-rose-500', type: 'gradient' },
@@ -57,6 +58,7 @@ export const SettingsScreen: React.FC = () => {
       if (settings) {
         setTheme(settings.theme || 'passionate');
         setWallpaper(settings.wallpaper || '');
+        if (settings.syncTheme !== undefined) setSyncTheme(settings.syncTheme);
       }
 
       const identity = await db.get('identity', 'me');
@@ -136,9 +138,11 @@ export const SettingsScreen: React.FC = () => {
     const idRes = await db.get('identity', 'me');
     if (idRes) {
        const supabaseUpdate: any = {};
-       if (updates.nickname) supabaseUpdate.nickname = updates.nickname;
-       if (updates.avatar) supabaseUpdate.avatar = updates.avatar;
-       if (updates.wallpaper !== undefined) supabaseUpdate.wallpaper = updates.wallpaper;
+        if (updates.nickname) supabaseUpdate.nickname = updates.nickname;
+        if (updates.avatar) supabaseUpdate.avatar = updates.avatar;
+        if (updates.wallpaper !== undefined) supabaseUpdate.wallpaper = updates.wallpaper;
+        if (updates.theme) supabaseUpdate.theme = updates.theme;
+        if (updates.imageUrl !== undefined) supabaseUpdate.imageUrl = updates.imageUrl;
        
        if (Object.keys(supabaseUpdate).length > 0) {
           try {
@@ -191,17 +195,28 @@ export const SettingsScreen: React.FC = () => {
         window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: updates.theme || theme, imageUrl: updates.imageUrl } }));
         const pSync = await db.get('partner', 'partner');
         const idenSync = await db.get('identity', 'me');
-        if (pSync && idenSync) {
-           try {
-              const importedPartnerKey = await importPublicKey(pSync.publicKeyPem);
-              const sharedKey = await deriveSharedSecret(idenSync.privateKey, importedPartnerKey);
-              const moodPayload = { type: 'signal:mood', mood: updates.theme || theme, imageUrl: updates.imageUrl };
-              const enc = await encryptMessage(sharedKey, JSON.stringify(moodPayload));
-              const s = getSocket();
-              if (s && s.connected) {
-                 s.emit('message:send', { to: pSync.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: idenSync.userId });
-              }
-              await supabase.from('hub_sync').insert([{
+         if (pSync && idenSync) {
+            try {
+               const importedPartnerKey = await importPublicKey(pSync.publicKeyPem);
+               const sharedKey = await deriveSharedSecret(idenSync.privateKey, importedPartnerKey);
+               const moodPayload = { type: 'signal:mood', mood: updates.theme || theme, imageUrl: updates.imageUrl };
+               const enc = await encryptMessage(sharedKey, JSON.stringify(moodPayload));
+               const s = getSocket();
+               if (s && s.connected) {
+                  s.emit('message:send', { to: pSync.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: idenSync.userId });
+               }
+
+               // Mirror Global Theme to Chat Wallpaper if Sync is enabled
+               if (syncTheme && (updates.theme || updates.imageUrl)) {
+                  const themeObj = themes.find(t => t.id === (updates.theme || theme));
+                  if (themeObj && themeObj.type === 'image') {
+                     setWallpaper(themeObj.image);
+                     await db.put('settings', { ...(await db.get('settings', 'main')), wallpaper: themeObj.image });
+                     await supabase.from('users').update({ wallpaper: themeObj.image }).eq('user_id', idRes.userId);
+                  }
+               }
+
+               await supabase.from('hub_sync').insert([{
                  id: `mood_${idenSync.userId}_${Date.now()}`,
                  type: 'mood',
                  owner_id: idenSync.userId,
@@ -297,11 +312,23 @@ export const SettingsScreen: React.FC = () => {
         </div>
 
         {/* LOOK & FEEL */}
-        <div className="space-y-4">
-          <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
-             <Palette size={12} />
-             <span>Romantic Theme</span>
-          </label>
+          <div className="flex items-center justify-between mb-2 px-1">
+             <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px]">
+                <Palette size={12} />
+                <span>Romantic Theme</span>
+             </label>
+             <button 
+                onClick={() => {
+                   const newVal = !syncTheme;
+                   setSyncTheme(newVal);
+                   saveSettings({ syncTheme: newVal });
+                }}
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${syncTheme ? 'bg-primary/20 border-primary/50 text-white' : 'bg-white/5 border-white/10 text-white/30'}`}
+             >
+                <div className={`w-3 h-3 rounded-full transition-all ${syncTheme ? 'bg-primary shadow-[0_0_8px_rgba(255,107,0,0.8)]' : 'bg-white/20'}`} />
+                <span className="text-[9px] font-black uppercase tracking-widest">Connect Chat Bg</span>
+             </button>
+          </div>
           <div className="grid grid-cols-2 gap-3">
              {themes.map(t => (
                 <button 
