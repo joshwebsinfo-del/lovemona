@@ -74,19 +74,6 @@ const BottomNav = () => {
 };
 
 // ──────────────────────────────────────────────
-const FakeCalculator = () => (
-  <div className="flex flex-col items-center justify-center h-full p-10 text-center select-none">
-    <h2 className="text-2xl font-bold text-white/20">Calculator</h2>
-    <p className="text-white/10 mt-1 text-sm italic mb-6">Basic calculator mode</p>
-    <div className="grid grid-cols-4 gap-2 w-full max-w-xs opacity-20 grayscale">
-      {[7,8,9,'÷',4,5,6,'×',1,2,3,'−','.',0,'=','+'].map((btn, i) => (
-        <div key={i} className="h-14 border border-white/20 flex items-center justify-center rounded-xl text-white text-lg">{btn}</div>
-      ))}
-    </div>
-  </div>
-);
-
-// ──────────────────────────────────────────────
 // Main App Content
 // ──────────────────────────────────────────────
 const AppContent = () => {

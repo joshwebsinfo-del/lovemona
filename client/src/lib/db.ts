@@ -26,7 +26,7 @@ const DB_VERSION = 5;
 
 export async function initDB(): Promise<IDBPDatabase> {
   const tryOpen = () => openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion, newVersion, transaction) {
+    upgrade(db, _, __, transaction) {
       const stores = ['messages', 'vault', 'keys', 'auth', 'identity', 'partner', 'settings'];
       for (const store of stores) {
         let os;

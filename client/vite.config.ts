@@ -112,10 +112,12 @@ export default defineConfig({
     chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-utils': ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge'],
-          'vendor-base': ['@supabase/supabase-js', 'socket.io-client', 'idb'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) return 'vendor-react';
+            if (id.includes('framer-motion') || id.includes('lucide-react')) return 'vendor-utils';
+            return 'vendor-base';
+          }
         }
       }
     }
