@@ -264,7 +264,7 @@ export const DashboardScreen = React.memo(() => {
     };
   }, []);
 
-  const getMoodGradient = () => ""; // Deprecated, handled by GlobalBackground
+  // Mood Gradient logic moved to GlobalBackground
 
   const saveStickyNote = async () => {
      if (!noteInput.trim()) return setIsEditingNote(false);

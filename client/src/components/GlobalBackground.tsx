@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initDB } from '../lib/db';
-import { getSocket } from '../lib/socket';
-import { decryptMessage } from '../lib/crypto';
+import { initSocket, getSocket } from '../lib/socket';
 import { supabase } from '../lib/supabase';
 
 interface Theme {
@@ -37,7 +36,7 @@ export const GlobalBackground: React.FC = () => {
        // Listen for mood/theme signals
        const s = getSocket();
        if (s) {
-          s.on('message:receive', async (data: any) => {
+          s.on('message:receive', async () => {
              // We need the shared key here, but for simplicity we rely on the DB sync for background mostly
              // However, real-time mood change is nice
           });
@@ -46,12 +45,8 @@ export const GlobalBackground: React.FC = () => {
        // Supabase Realtime for theme sync
        if (iden && p) {
          const channel = supabase.channel('theme_sync')
-           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hub_sync', filter: `partner_id=eq.${iden.userId}` }, async (payload) => {
-               if (payload.new.type === 'mood') {
-                  // Re-fetch to get latest
-                  const { data } = await supabase.from('hub_sync').select('*').eq('id', payload.new.id).single();
-                  // Decryption logic would go here, but App.tsx already handles the state updates for partnerMood
-               }
+           .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hub_sync', filter: `partner_id=eq.${iden.userId}` }, async () => {
+               // Re-fetch to get latest
            })
            .subscribe();
          return () => { supabase.removeChannel(channel); };
