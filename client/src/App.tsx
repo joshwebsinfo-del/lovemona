@@ -17,6 +17,7 @@ import { initSocket, getSocket } from './lib/socket';
 import { supabase } from './lib/supabase';
 import { decryptMessage, encryptMessage, deriveSharedSecret, importPublicKey } from './lib/crypto';
 import { NotificationProvider, useNotifications } from './components/NotificationProvider';
+import { GlobalBackground } from './components/GlobalBackground';
 
 // ──────────────────────────────────────────────
 // Bottom navigation
@@ -720,7 +721,8 @@ const AppContent = () => {
   // RENDER: Normal app (no call)
   // ═══════════════════════════════════════════
   return (
-    <div className={`h-screen w-full bg-[#0a0a0c] overflow-hidden flex flex-col font-sans relative transition-all duration-300 ${isBlurred ? 'opacity-0 blur-2xl pointer-events-none scale-95' : 'opacity-100 blur-0 scale-100'}`}>
+    <div className={`h-screen w-full bg-transparent overflow-hidden flex flex-col font-sans relative transition-all duration-300 ${isBlurred ? 'opacity-0 blur-2xl pointer-events-none scale-95' : 'opacity-100 blur-0 scale-100'}`}>
+      <GlobalBackground />
       {isLoading ? (
         <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
            <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />

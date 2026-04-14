@@ -33,39 +33,7 @@ const CountdownWidget = React.memo(({ target }: { target: number }) => {
   );
 });
 
-// --- ROMANTIC FLOATING LIGHTS ---
-const RomanticAtmosphere: React.FC = React.memo(() => {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden will-change-transform">
-      <motion.div 
-        animate={{ 
-          scale: [1, 1.15, 1],
-          opacity: [0.2, 0.4, 0.2],
-        }}
-        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/10 blur-[150px] rounded-full will-change-opacity" 
-      />
-      <motion.div 
-        animate={{ 
-          scale: [1, 1.25, 1],
-          opacity: [0.15, 0.35, 0.15],
-        }}
-        transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute bottom-[-30%] right-[-20%] w-[120vw] h-[120vw] bg-purple-600/10 blur-[180px] rounded-full will-change-opacity" 
-      />
-      
-      {[0.15, 0.45, 0.75, 0.25, 0.85, 0.55].map((val, i) => (
-        <motion.div
-          key={i}
-          initial={{ y: '110vh', x: `${val * 100}vw`, opacity: 0 }}
-          animate={{ y: '-10vh', opacity: [0, 0.4, 0] }}
-          transition={{ duration: val * 8 + 12, repeat: Infinity, delay: i * 3 }}
-          className="absolute w-1 h-1 bg-white rounded-full blur-[1px] will-change-[transform,opacity]"
-        />
-      ))}
-    </div>
-  );
-});
+// --- ROMANTIC FLOATING LIGHTS --- Moved to GlobalBackground
 
 export const DashboardScreen = React.memo(() => {
   const navigate = useNavigate();
@@ -296,14 +264,7 @@ export const DashboardScreen = React.memo(() => {
     };
   }, []);
 
-  const getMoodGradient = () => {
-     switch(partnerMood) {
-        case 'passionate': return 'from-rose-500/30 via-zinc-950 to-black';
-        case 'calm': return 'from-sky-500/20 via-zinc-950 to-black';
-        case 'playful': return 'from-fuchsia-500/20 via-zinc-950 to-black';
-        default: return 'from-zinc-800 via-zinc-950 to-black';
-     }
-  };
+  const getMoodGradient = () => ""; // Deprecated, handled by GlobalBackground
 
   const saveStickyNote = async () => {
      if (!noteInput.trim()) return setIsEditingNote(false);
@@ -349,6 +310,7 @@ export const DashboardScreen = React.memo(() => {
       settings.theme = m;
       await db.put('settings', settings);
       setPartnerMood(m);
+      window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: m } }));
       
       const s = getSocket();
       if (s && myIdentity && partner && sharedKey) {
@@ -396,9 +358,7 @@ export const DashboardScreen = React.memo(() => {
   };
 
   return (
-    <div className={`flex flex-col h-full bg-[#050505] relative overflow-hidden transition-all duration-1000 bg-gradient-to-b ${getMoodGradient()}`}>
-      
-      <RomanticAtmosphere />
+    <div className={`flex flex-col h-full bg-transparent relative overflow-hidden transition-all duration-1000`}>
 
       {/* PUSH NOTIFICATION BANNER */}
       <AnimatePresence>

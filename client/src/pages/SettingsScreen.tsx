@@ -20,10 +20,14 @@ export const SettingsScreen: React.FC = () => {
   const [partnerId, setPartnerId] = useState('');
 
   const themes = [
-    { id: 'passionate', label: 'Passionate', color: 'bg-rose-500' },
-    { id: 'calm', label: 'Calm', color: 'bg-sky-500' },
-    { id: 'playful', label: 'Playful', color: 'bg-fuchsia-500' },
-    { id: 'classic', label: 'Classic', color: 'bg-zinc-500' },
+    { id: 'passionate', label: 'Passionate', color: 'bg-rose-500', type: 'gradient' },
+    { id: 'calm', label: 'Calm', color: 'bg-sky-500', type: 'gradient' },
+    { id: 'playful', label: 'Playful', color: 'bg-fuchsia-500', type: 'gradient' },
+    { id: 'silk', label: 'Silk & Moonlight', image: '/themes/silk.png', type: 'image' },
+    { id: 'midnight', label: 'Midnight Sparkle', image: '/themes/midnight.png', type: 'image' },
+    { id: 'rose', label: 'Rose Garden', image: '/themes/rose.png', type: 'image' },
+    { id: 'golden', label: 'Golden Hour', image: '/themes/golden.png', type: 'image' },
+    { id: 'velvet', label: 'Abstract Velvet', image: '/themes/velvet.png', type: 'image' },
   ];
 
   const wallpapers = [
@@ -60,6 +64,35 @@ export const SettingsScreen: React.FC = () => {
     };
     loadSettings();
   }, []);
+
+  const handleThemeImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+       const img = new Image();
+       img.src = reader.result as string;
+       img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 1200; // Better quality for backgrounds
+          let { width, height } = img;
+          if (width > height) {
+             if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+          } else {
+             if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setTheme('custom');
+          saveSettings({ theme: 'custom', imageUrl: dataUrl });
+          window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: 'custom', imageUrl: dataUrl } }));
+       };
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -150,6 +183,33 @@ export const SettingsScreen: React.FC = () => {
            }
          } catch(e) { console.error('Failed to sync identity updates', e); }
        }
+    }
+    
+    if (updates.theme || updates.imageUrl) {
+        window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: updates.theme || theme, imageUrl: updates.imageUrl } }));
+        const pSync = await db.get('partner', 'partner');
+        const idenSync = await db.get('identity', 'me');
+        if (pSync && idenSync) {
+           try {
+              const importedPartnerKey = await importPublicKey(pSync.publicKeyPem);
+              const sharedKey = await deriveSharedSecret(idenSync.privateKey, importedPartnerKey);
+              const moodPayload = { type: 'signal:mood', mood: updates.theme || theme, imageUrl: updates.imageUrl };
+              const enc = await encryptMessage(sharedKey, JSON.stringify(moodPayload));
+              const s = getSocket();
+              if (s && s.connected) {
+                 s.emit('message:send', { to: pSync.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: idenSync.userId });
+              }
+              await supabase.from('hub_sync').insert([{
+                 id: `mood_${idenSync.userId}_${Date.now()}`,
+                 type: 'mood',
+                 owner_id: idenSync.userId,
+                 partner_id: pSync.userId,
+                 encrypted_payload: enc.encrypted,
+                 iv: enc.iv,
+                 updated_at: Date.now()
+              }]);
+           } catch(e) {}
+        }
     }
   };
 
@@ -246,17 +306,28 @@ export const SettingsScreen: React.FC = () => {
                   key={t.id}
                   onClick={() => {
                      setTheme(t.id);
-                     saveSettings({ theme: t.id });
+                     saveSettings({ theme: t.id, imageUrl: null });
                   }}
-                  className={`h-16 rounded-[24px] border flex items-center justify-between px-4 transition-all ${theme === t.id ? 'bg-white text-black border-white' : 'bg-white/5 border-white/5 text-white/40'}`}
+                  className={`h-24 rounded-[28px] border transition-all relative overflow-hidden group ${theme === t.id ? 'border-primary' : 'bg-white/5 border-white/5 text-white/40'}`}
                 >
-                   <div className="flex items-center space-x-3">
-                      <div className={`w-6 h-6 rounded-full ${t.color}`} />
-                      <span className="text-[13px] font-black tracking-tight">{t.label}</span>
+                   {t.type === 'image' ? (
+                      <img src={t.image} className="absolute inset-0 w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+                   ) : (
+                      <div className={`absolute inset-0 opacity-40 ${t.color}`} />
+                   )}
+                   <div className="relative z-10 w-full h-full flex items-center justify-between px-4 bg-black/20">
+                      <span className="text-[11px] font-black tracking-widest uppercase text-white shadow-black drop-shadow-lg">{t.label}</span>
+                      {theme === t.id && <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white shadow-lg"><Check size={14} /></div>}
                    </div>
-                   {theme === t.id && <Check size={16} />}
                 </button>
              ))}
+             {/* Custom Theme Upload */}
+             <label className={`h-24 rounded-[28px] border flex flex-col items-center justify-center space-y-1 cursor-pointer transition-all ${theme === 'custom' ? 'bg-primary/20 border-primary text-primary' : 'bg-white/5 border-white/5 text-white/20 hover:text-white/40'}`}>
+                <ImageIcon size={20} />
+                <span className="text-[9px] font-black uppercase tracking-widest">Custom Theme</span>
+                <input type="file" accept="image/*" onChange={handleThemeImageUpload} className="hidden" />
+                {theme === 'custom' && <div className="absolute top-2 right-2"><Check size={12} /></div>}
+             </label>
           </div>
         </div>
 
