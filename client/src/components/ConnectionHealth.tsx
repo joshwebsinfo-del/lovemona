@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { Shield, ShieldAlert, ShieldCheck, WifiOff } from 'lucide-react';
 
 interface ConnectionHealthProps {

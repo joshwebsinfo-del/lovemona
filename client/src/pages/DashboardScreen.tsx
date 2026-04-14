@@ -123,7 +123,7 @@ export const DashboardScreen = React.memo(() => {
   // ── Cloud Sync ──
   useEffect(() => {
     if (!myIdentity || !partner || !sharedKey) return;
-    const pid = partner.userId;
+    const id = myIdentity.userId;
 
     const channel = supabase
       .channel('hub_realtime')
