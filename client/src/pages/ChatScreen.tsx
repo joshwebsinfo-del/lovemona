@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check } from 'lucide-react';
@@ -7,6 +6,7 @@ import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
+import { ConnectionHealth } from '../components/ConnectionHealth';
 
 import { LiveWallpaper } from '../components/LiveWallpaper';
 
@@ -129,6 +129,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [isBlurred, setIsBlurred] = useState(false); // Shoulder surfing protection
   const [partnerOnline, setPartnerOnline] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const partnerIdRef = useRef('');
   
   // States
@@ -366,6 +367,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     
     const s = getSocket() || initSocket(myUserId);
     const doSubscribe = () => {
+       setSocketConnected(true);
        const pid = partnerIdRef.current;
        if (pid) s.emit('status:subscribe', { partnerId: pid });
     };
@@ -373,6 +375,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     const handleStatus = (data: { isOnline: boolean }) => setPartnerOnline(data.isOnline);
     s.on('status:update', handleStatus);
     s.on('connect', doSubscribe);
+    s.on('disconnect', () => setSocketConnected(false));
     if (s.connected) doSubscribe();
 
     const handleReceive = async (data: { encrypted: string; iv: string; messageId?: string; senderId: string; timestamp?: number }) => {
@@ -531,6 +534,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
       s.off('message:receive', handleReceive); 
       s.off('status:update', handleStatus);
       s.off('connect', doSubscribe);
+      s.off('disconnect');
     };
   }, [sharedKey, myUserId, partnerInfo.userId]);
 
@@ -639,7 +643,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     setSelectedIds(new Set());
   };
 
+  const repairConnection = async () => {
+    if (!sharedKey || !myUserId) return;
+    try {
+      await sendSecurePayload({ type: 'identity:sync', nick: appConfig?.nickname, avatar: appConfig?.avatar });
+      alert('Sync signal sent! If your partner is online, your bridge should turn green in a few seconds.');
+    } catch {
+      alert('Failed to send sync signal. Check your internet.');
+    }
+  };
 
+  useEffect(() => {
+    if (sharedKey && socketConnected) {
+       // Send an invisible sync heartbeat on mount
+       sendSecurePayload({ type: 'identity:sync', nick: appConfig?.nickname, avatar: appConfig?.avatar });
+    }
+  }, [sharedKey, socketConnected]);
 
   // ── SEND LOCATION (one-tap) ──
   const sendLocation = () => {
@@ -1041,6 +1060,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                setShowMenu={setShowMenu} clearChat={clearChat} 
                sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} 
                setWallpaper={setWallpaper} navigate={navigate} 
+               socketConnected={socketConnected} sharedKey={sharedKey}
              />
           )}
        </AnimatePresence>
@@ -1250,7 +1270,7 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
   </div>
 ));
 
-const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate }: any) => (
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey }: any) => (
   <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-4 py-3 flex items-center justify-between backdrop-blur-xl">
     <div className="flex items-center space-x-3">
       <button onClick={() => navigate('/')} className="p-2 -ml-2 text-white/40 hover:text-white transition-colors active:scale-90">
@@ -1263,13 +1283,14 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
         </div>
         <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
       </div>
-      <div>
-        <h2 className="font-semibold text-white text-[16px] tracking-wide leading-tight">{partnerInfo.nick}</h2>
-        <div className="flex items-center mt-0.5 space-x-1">
-           <ShieldCheck size={12} className={partnerOnline ? "text-green-400" : "text-white/30"} />
-           <p className={`text-[11px] font-medium tracking-wider uppercase ${partnerOnline ? 'text-green-400' : 'text-white/30'}`}>
-             {partnerOnline ? 'Online & Secure' : 'Secure Line'}
-           </p>
+      <div className="flex-1 min-w-0">
+        <h2 className="text-white font-bold truncate">{partnerInfo.nick || 'Partner'}</h2>
+        <div className="flex items-center space-x-2 mt-0.5">
+          <ConnectionHealth 
+            isSocketConnected={socketConnected}
+            isPartnerOnline={partnerOnline}
+            isEncryptionReady={!!sharedKey}
+          />
         </div>
       </div>
     </div>
@@ -1293,7 +1314,11 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
                 <button onClick={() => { sendSecurePayload({ type: 'location:request' }); setShowMenu(false); }} className="w-full text-left px-4 py-2 text-white text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5 flex items-center justify-between">
                   Ping Location <MapPin size={14} className="text-primary" />
                 </button>
-                <button onClick={clearChat} className="w-full text-left px-4 py-2 text-red-400 text-sm hover:bg-white/5 active:bg-white/10 transition-colors border-b border-white/5">
+                <button onClick={repairConnection} className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-white/5 transition-colors text-primary">
+                  <Fingerprint size={18} />
+                  <span className="text-sm font-semibold">Repair Connection</span>
+                </button>
+                <button onClick={clearChat} className="w-full flex items-center space-x-3 p-3 rounded-xl hover:bg-white/5 transition-colors text-red-500">
                   Clear History
                 </button>
                 <div className="px-4 py-2">

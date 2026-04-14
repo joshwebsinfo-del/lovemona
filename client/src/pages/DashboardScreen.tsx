@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Lock, Heart, Activity, Settings, Phone, Video, Gamepad2, Edit3, Clock, Image as ImageIcon, Bell } from 'lucide-react';
 import { useNotifications } from '../components/NotificationProvider';
+import { ConnectionHealth } from '../components/ConnectionHealth';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { importPublicKey, deriveSharedSecret, decryptMessage, encryptMessage } from '../lib/crypto';
@@ -38,9 +39,10 @@ const CountdownWidget = React.memo(({ target }: { target: number }) => {
 export const DashboardScreen = React.memo(() => {
   const navigate = useNavigate();
   const [partner, setPartner] = useState<Partner | null>(null);
-  const [, setMe] = useState<AuthConfig | null>(null);
+  const [me, setMe] = useState<AuthConfig | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isTugging, setIsTugging] = useState(false);
   const [partnerMood, setPartnerMood] = useState<string>('default');
@@ -61,6 +63,99 @@ export const DashboardScreen = React.memo(() => {
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tugRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+
+  // ── Socket Connection & Messaging ──
+  useEffect(() => {
+    if (!myIdentity || !partner || !sharedKey) return;
+
+    const s = getSocket() || initSocket(myIdentity.userId);
+    const id = myIdentity.userId;
+    const pid = partner.userId;
+
+    const handleReceive = async (data: { encrypted: string; iv: string; messageId?: string; senderId: string; timestamp?: number }) => {
+      try {
+         const dec = await decryptMessage(sharedKey, data.encrypted, data.iv);
+         const payload = JSON.parse(dec);
+         if (payload.type === 'typing') {
+            setIsTyping(true);
+            if (typingRef.current) clearTimeout(typingRef.current);
+            typingRef.current = setTimeout(() => setIsTyping(false), 3000);
+         } else if (payload.type === 'signal:tug') {
+            setIsTugging(true);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+            if (tugRef.current) clearTimeout(tugRef.current);
+            tugRef.current = setTimeout(() => setIsTugging(false), 5000);
+         } else if (payload.type === 'signal:mood') {
+            setPartnerMood(payload.mood);
+         } else if (payload.type === 'hub:game_invite') {
+             window.dispatchEvent(new CustomEvent('incoming-game-invite', { 
+                detail: { type: 'game', isGameMode: true, gameType: payload.game || 'categories' } 
+             }));
+          } else if (payload.type === 'hub:note') {
+             setPartnerNote(payload.text);
+             const db2 = await initDB();
+             await db2.put('settings', { id: 'sticky_note_partner', data: payload.text });
+          } else if (payload.type === 'text' || payload.type === 'media') {
+             setUnreadCount(c => c + 1);
+          }
+      } catch { /* ignored */ }
+    };
+
+    const handleStatus = (data: { isOnline: boolean }) => setIsOnline(data.isOnline);
+    const doSubscribe = () => {
+      setSocketConnected(true);
+      s.emit('status:subscribe', { partnerId: pid });
+    };
+
+    s.on('message:receive', handleReceive);
+    s.on('status:update', handleStatus);
+    s.on('connect', doSubscribe);
+    s.on('disconnect', () => setSocketConnected(false));
+    if (s.connected) doSubscribe();
+
+    return () => {
+      s.off('message:receive', handleReceive);
+      s.off('status:update', handleStatus);
+      s.off('connect', doSubscribe);
+      s.off('disconnect');
+    };
+  }, [myIdentity, partner, sharedKey]);
+
+  // ── Cloud Sync ──
+  useEffect(() => {
+    if (!myIdentity || !partner || !sharedKey) return;
+    const pid = partner.userId;
+    const id = myIdentity.userId;
+
+    const channel = supabase
+      .channel('hub_realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hub_sync' }, async (payload) => {
+         const row = payload.new;
+         if (row.partner_id === id && sharedKey) {
+            try {
+               const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
+               const data = JSON.parse(dec);
+               if (row.type === 'note') {
+                  if (row.owner_id === id) setMyNote(data.text);
+                  else setPartnerNote(data.text);
+                  const db2 = await initDB();
+                  await db2.put('settings', { id: row.owner_id === id ? 'sticky_note_me' : 'sticky_note_partner', data: data.text });
+               } else if (row.type === 'mood') {
+                  setPartnerMood(data.mood);
+               } else if (row.type === 'countdown') {
+                  setCountdown(data.target);
+                  const db2 = await initDB();
+                  await db2.put('settings', { id: 'countdown_target', data: data.target });
+               }
+            } catch(e) { console.error('Cloud Sync Decrypt Failed', e); }
+         }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myIdentity, partner, sharedKey]);
 
   useEffect(() => {
     const load = async () => {
@@ -116,71 +211,6 @@ export const DashboardScreen = React.memo(() => {
           const currentUnread = msgs.filter((m: {status: string, senderId: string}) => m.status === 'unread' && m.senderId === p.userId).length;
           setUnreadCount(currentUnread);
 
-          const s = getSocket() || initSocket(identity.userId);
-          
-          const handleReceive = async (data: { encrypted: string; iv: string; messageId?: string; senderId: string; timestamp?: number }) => {
-             try {
-                const dec = await decryptMessage(key, data.encrypted, data.iv);
-                const payload = JSON.parse(dec);
-                if (payload.type === 'typing') {
-                   setIsTyping(true);
-                   if (typingRef.current) clearTimeout(typingRef.current);
-                   typingRef.current = setTimeout(() => setIsTyping(false), 3000);
-                } else if (payload.type === 'signal:tug') {
-                   setIsTugging(true);
-                   if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
-                   if (tugRef.current) clearTimeout(tugRef.current);
-                   tugRef.current = setTimeout(() => setIsTugging(false), 5000);
-                } else if (payload.type === 'signal:mood') {
-                   setPartnerMood(payload.mood);
-                } else if (payload.type === 'hub:game_invite') {
-                    window.dispatchEvent(new CustomEvent('incoming-game-invite', { 
-                       detail: { type: 'game', isGameMode: true, gameType: payload.game || 'categories' } 
-                    }));
-                 } else if (payload.type === 'hub:note') {
-                    setPartnerNote(payload.text);
-                    const db2 = await initDB();
-                    await db2.put('settings', { id: 'sticky_note_partner', data: payload.text });
-                 } else if (payload.type === 'text' || payload.type === 'media') {
-                    setUnreadCount(c => c + 1);
-                 }
-             } catch { /* ignored */ }
-          };
-
-          const handleStatus = (data: { isOnline: boolean }) => setIsOnline(data.isOnline);
-          s.on('message:receive', handleReceive);
-          s.on('status:update', handleStatus);
-          
-          const doSubscribe = () => { if (p.userId) s.emit('status:subscribe', { partnerId: p.userId }); };
-          if (s.connected) doSubscribe();
-          s.on('connect', doSubscribe);
-
-          // ── SUPABASE REALTIME SYNC ──
-          const channel = supabase
-            .channel('hub_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hub_sync' }, async (payload) => {
-               const row = payload.new;
-               if (row.partner_id === identity.userId && sharedKey) {
-                  try {
-                     const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
-                     const data = JSON.parse(dec);
-                     if (row.type === 'note') {
-                        if (row.owner_id === identity.userId) setMyNote(data.text);
-                        else setPartnerNote(data.text);
-                        const db2 = await initDB();
-                        await db2.put('settings', { id: row.owner_id === identity.userId ? 'sticky_note_me' : 'sticky_note_partner', data: data.text });
-                     } else if (row.type === 'mood') {
-                        setPartnerMood(data.mood);
-                     } else if (row.type === 'countdown') {
-                        setCountdown(data.target);
-                        const db2 = await initDB();
-                        await db2.put('settings', { id: 'countdown_target', data: data.target });
-                     }
-                  } catch(e) { console.error('Cloud Sync Decrypt Failed', e); }
-               }
-            })
-            .subscribe();
-
           const fetchCloudData = async () => {
              try {
                 const { data: rows } = await supabase
@@ -188,14 +218,14 @@ export const DashboardScreen = React.memo(() => {
                   .select('*')
                   .or(`and(owner_id.eq.${identity.userId},partner_id.eq.${p.userId}),and(owner_id.eq.${p.userId},partner_id.eq.${identity.userId})`)
                   .order('updated_at', { ascending: false });
-                if (rows && rows.length > 0 && sharedKey) {
+                if (rows && rows.length > 0 && key) {
                     const processedTypes = new Set();
                     const db = await initDB();
                     for (const row of rows) {
                        if (processedTypes.has(row.type)) continue;
                        processedTypes.add(row.type);
                        try {
-                          const dec = await decryptMessage(sharedKey, row.encrypted_payload, row.iv);
+                          const dec = await decryptMessage(key, row.encrypted_payload, row.iv);
                           const parsed = JSON.parse(dec);
                           if (row.type === 'note') {
                              if (row.owner_id === identity.userId) setMyNote(parsed.text);
@@ -228,10 +258,6 @@ export const DashboardScreen = React.memo(() => {
              .subscribe();
 
            return () => { 
-              s.off('message:receive', handleReceive); 
-              s.off('status:update', handleStatus); 
-              s.off('connect', doSubscribe);
-              supabase.removeChannel(channel);
               supabase.removeChannel(scoreChannel);
            };
         } catch { /* ignored */ }
@@ -585,9 +611,17 @@ export const DashboardScreen = React.memo(() => {
                   <div className="w-7 h-7 bg-white/10 backdrop-blur-md rounded-lg flex items-center justify-center text-white border border-white/20">
                      <Lock size={14} />
                   </div>
-                  <div className="text-left mt-auto">
-                     <h3 className="text-white font-black text-[12px] tracking-widest uppercase shadow-black drop-shadow-md">Vault</h3>
-                     <p className="text-white/80 text-[8px] uppercase font-black tracking-wider shadow-black drop-shadow-md">{vaultMemory ? 'Memory' : 'Secured'}</p>
+                  <div className="flex-1 min-w-0">
+                    <h1 className="text-2xl font-black text-white tracking-tight flex items-center">
+                      {me?.nickname || 'SecureLove'}
+                    </h1>
+                    <div className="flex items-center space-x-2 mt-1">
+                       <ConnectionHealth 
+                          isSocketConnected={socketConnected}
+                          isPartnerOnline={isOnline}
+                          isEncryptionReady={!!sharedKey}
+                       />
+                    </div>
                   </div>
                </div>
             </motion.button>
