@@ -35,6 +35,29 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
+        shortcuts: [
+          {
+            name: 'Love Chat',
+            short_name: 'Chat',
+            description: 'Open our private conversation',
+            url: '/chat',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          },
+          {
+            name: 'The Vault',
+            short_name: 'Vault',
+            description: 'Access our shared memories',
+            url: '/vault',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          },
+          {
+            name: 'Emergency Panic',
+            short_name: 'Panic',
+            description: 'Secure the app instantly',
+            url: '/panic',
+            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }]
+          }
+        ],
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -75,13 +98,27 @@ export default defineConfig({
             urlPattern: /^https:\/\/assets\.mixkit\.co\/.*/i,
             handler: 'CacheFirst',
             options: { cacheName: 'media-assets-cache', expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 30 } }
+          },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'images-cache', expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 } }
           }
         ]
       }
     })
   ],
   build: {
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-utils': ['framer-motion', 'lucide-react', 'clsx', 'tailwind-merge'],
+          'vendor-base': ['@supabase/supabase-js', 'socket.io-client', 'idb'],
+        }
+      }
+    }
   },
 })
 

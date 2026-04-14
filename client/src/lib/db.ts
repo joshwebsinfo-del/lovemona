@@ -22,22 +22,25 @@ export interface VaultItem {
 }
 
 const DB_NAME = 'SecureLoveDB';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 export async function initDB(): Promise<IDBPDatabase> {
   const tryOpen = () => openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion) {
+    upgrade(db, oldVersion, newVersion, transaction) {
       const stores = ['messages', 'vault', 'keys', 'auth', 'identity', 'partner', 'settings'];
       for (const store of stores) {
+        let os;
         if (!db.objectStoreNames.contains(store)) {
-          db.createObjectStore(store, { keyPath: 'id' });
+          os = db.createObjectStore(store, { keyPath: 'id' });
+        } else {
+          os = transaction.objectStore(store);
         }
-      }
-      
-      // Seed default settings if new
-      if (oldVersion < 4) {
-         // We can't put data easily in upgrade without a transaction, 
-         // but we'll handle it in the init logic or screens.
+
+        if (store === 'messages' || store === 'vault') {
+           if (!os.indexNames.contains('timestamp')) {
+              os.createIndex('timestamp', 'timestamp');
+           }
+        }
       }
     },
   });

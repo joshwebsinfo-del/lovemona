@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { lazy, Suspense, useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, Home, Lock, Settings } from 'lucide-react';
-import { DashboardScreen } from './pages/DashboardScreen';
-import { ChatScreen } from './pages/ChatScreen';
-import { VaultScreen } from './pages/VaultScreen';
-import { PanicScreen } from './pages/PanicScreen';
-import { LockScreen } from './pages/LockScreen';
-import { SetupScreen } from './pages/SetupScreen';
-import { PinSetupScreen } from './pages/PinSetupScreen';
-import { SettingsScreen } from './pages/SettingsScreen';
-import { CallScreen } from './pages/CallScreen';
+
+const DashboardScreen = lazy(() => import('./pages/DashboardScreen').then(m => ({ default: m.DashboardScreen })));
+const ChatScreen = lazy(() => import('./pages/ChatScreen').then(m => ({ default: m.ChatScreen })));
+const VaultScreen = lazy(() => import('./pages/VaultScreen').then(m => ({ default: m.VaultScreen })));
+const PanicScreen = lazy(() => import('./pages/PanicScreen').then(m => ({ default: m.PanicScreen })));
+const LockScreen = lazy(() => import('./pages/LockScreen').then(m => ({ default: m.LockScreen })));
+const SetupScreen = lazy(() => import('./pages/SetupScreen').then(m => ({ default: m.SetupScreen })));
+const PinSetupScreen = lazy(() => import('./pages/PinSetupScreen').then(m => ({ default: m.PinSetupScreen })));
+const SettingsScreen = lazy(() => import('./pages/SettingsScreen').then(m => ({ default: m.SettingsScreen })));
+const CallScreen = lazy(() => import('./pages/CallScreen').then(m => ({ default: m.CallScreen })));
+
 import { initDB } from './lib/db';
 import type { AuthConfig, Partner } from './lib/types';
 import { initSocket, getSocket } from './lib/socket';
@@ -739,15 +741,33 @@ const AppContent = () => {
         <>
           <div className="flex-1 relative overflow-hidden">
             <AnimatePresence mode="wait">
-              <motion.div key={location.pathname + (isFakeMode ? '-fake' : '')} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="absolute inset-0">
-                {isFakeMode ? <FakeCalculator /> : (
-                  <Routes location={location}>
-                    <Route path="/"       element={<DashboardScreen />} />
-                    <Route path="/chat"   element={<ChatScreen />} />
-                    <Route path="/vault"  element={<VaultScreen />} />
-                    <Route path="/panic"  element={<PanicScreen />} />
-                    <Route path="/settings" element={<SettingsScreen />} />
-                  </Routes>
+              <motion.div 
+                key={location.pathname + (isFakeMode ? '-fake' : '')} 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }} 
+                transition={{ duration: 0.2 }} 
+                className="absolute inset-0"
+              >
+                {isFakeMode ? (
+                  <div className="h-full bg-black flex items-center justify-center text-white/20 font-mono text-xs uppercase tracking-widest">
+                    {/* Simplified Fake Mode for performance */}
+                    Calculator Mode Active
+                  </div>
+                ) : (
+                  <Suspense fallback={
+                    <div className="h-full flex items-center justify-center bg-transparent">
+                      <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                    </div>
+                  }>
+                    <Routes location={location}>
+                      <Route path="/" element={<DashboardScreen />} />
+                      <Route path="/chat" element={<ChatScreen />} />
+                      <Route path="/vault" element={<VaultScreen />} />
+                      <Route path="/panic" element={<PanicScreen />} />
+                      <Route path="/settings" element={<SettingsScreen />} />
+                    </Routes>
+                  </Suspense>
                 )}
               </motion.div>
             </AnimatePresence>
