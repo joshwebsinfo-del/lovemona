@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, Fingerprint, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -646,7 +646,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const repairConnection = async () => {
     if (!sharedKey || !myUserId) return;
     try {
-      await sendSecurePayload({ type: 'identity:sync', nick: appConfig?.nickname, avatar: appConfig?.avatar });
+      const db = await initDB();
+      const auth = await db.get('auth', 'pins');
+      await sendSecurePayload({ type: 'identity:sync', nick: auth?.nickname, avatar: auth?.avatar });
       alert('Sync signal sent! If your partner is online, your bridge should turn green in a few seconds.');
     } catch {
       alert('Failed to send sync signal. Check your internet.');
@@ -656,7 +658,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   useEffect(() => {
     if (sharedKey && socketConnected) {
        // Send an invisible sync heartbeat on mount
-       sendSecurePayload({ type: 'identity:sync', nick: appConfig?.nickname, avatar: appConfig?.avatar });
+       initDB().then(db => db.get('auth', 'pins')).then(auth => {
+         if (auth) sendSecurePayload({ type: 'identity:sync', nick: auth.nickname, avatar: auth.avatar });
+       });
     }
   }, [sharedKey, socketConnected]);
 
@@ -1061,6 +1065,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
                sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} 
                setWallpaper={setWallpaper} navigate={navigate} 
                socketConnected={socketConnected} sharedKey={sharedKey}
+               repairConnection={repairConnection}
              />
           )}
        </AnimatePresence>
@@ -1270,7 +1275,7 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
   </div>
 ));
 
-const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey }: any) => (
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection }: any) => (
   <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-4 py-3 flex items-center justify-between backdrop-blur-xl">
     <div className="flex items-center space-x-3">
       <button onClick={() => navigate('/')} className="p-2 -ml-2 text-white/40 hover:text-white transition-colors active:scale-90">

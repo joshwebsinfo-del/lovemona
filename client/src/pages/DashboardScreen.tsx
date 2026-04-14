@@ -69,7 +69,6 @@ export const DashboardScreen = React.memo(() => {
     if (!myIdentity || !partner || !sharedKey) return;
 
     const s = getSocket() || initSocket(myIdentity.userId);
-    const id = myIdentity.userId;
     const pid = partner.userId;
 
     const handleReceive = async (data: { encrypted: string; iv: string; messageId?: string; senderId: string; timestamp?: number }) => {
@@ -125,7 +124,6 @@ export const DashboardScreen = React.memo(() => {
   useEffect(() => {
     if (!myIdentity || !partner || !sharedKey) return;
     const pid = partner.userId;
-    const id = myIdentity.userId;
 
     const channel = supabase
       .channel('hub_realtime')

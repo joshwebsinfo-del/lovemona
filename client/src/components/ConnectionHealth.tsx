@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, ShieldAlert, ShieldCheck, Wifi, WifiOff, Fingerprint } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Shield, ShieldAlert, ShieldCheck, WifiOff } from 'lucide-react';
 
 interface ConnectionHealthProps {
   isSocketConnected: boolean;
