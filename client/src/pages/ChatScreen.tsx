@@ -17,7 +17,7 @@ interface ChatScreenProps {
 interface SupabaseMessage { id: string; sender_id: string; recipient_id: string; encrypted_payload: string; iv: string; timestamp: number }
 
 interface ChatPayload {
-  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync' | 'location:request';
+  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync' | 'location:request' | 'delete';
   text?: string;
   mediaType?: string;
   mediaData?: string;
@@ -25,6 +25,7 @@ interface ChatPayload {
   candidate?: RTCIceCandidateInit;
   callType?: 'video' | 'voice';
   messageId?: string;
+  messageIds?: string[];
   reaction?: string;
   nick?: string;
   avatar?: string;
@@ -140,6 +141,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const [recordDuration, setRecordDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState('');
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
 
   // Refs
@@ -202,8 +205,24 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   };
 
   const handleMessageTap = useCallback((id: string) => {
+    if (isSelectionMode) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        if (next.size === 0) setIsSelectionMode(false);
+        return next;
+      });
+      return;
+    }
     setSelectedMessageId(prev => prev === id ? null : id);
-  }, []);
+  }, [isSelectionMode]);
+
+  const toggleSelectionMode = (id: string) => {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set([id]));
+    setSelectedMessageId(null);
+  };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -377,6 +396,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
            const db = await initDB();
            const msg = await db.get('messages', payload.messageId);
            if (msg) await db.put('messages', { ...msg, reaction: payload.reaction });
+           return;
+        }
+
+        if (payload.type === 'delete' && payload.messageIds) {
+           const db = await initDB();
+           setMessages(prev => prev.filter(m => !payload.messageIds!.includes(m.id)));
+           for (const id of payload.messageIds) {
+              await db.delete('messages', id);
+           }
            return;
         }
         
@@ -584,6 +612,29 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
     await db.put('messages', msg);
 
     await sendSecurePayload(payload, msgId);
+  };
+
+  const deleteMessagesForEveryone = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} message(s) for everyone?`)) return;
+
+    const idsToDelete = Array.from(selectedIds);
+    const db = await initDB();
+    
+    // 1. Local Delete
+    setMessages(prev => prev.filter(m => !selectedIds.has(m.id)));
+    for (const id of idsToDelete) {
+       await db.delete('messages', id);
+    }
+    
+    // 2. Cloud Delete
+    await supabase.from('messages').delete().in('id', idsToDelete);
+    
+    // 3. Socket Signal
+    await sendSecurePayload({ type: 'delete', messageIds: idsToDelete });
+    
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
   };
 
 
@@ -974,23 +1025,38 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
          </div>
       )}
 
-      <ChatHeader 
-        partnerInfo={partnerInfo} partnerOnline={partnerOnline} isBlurred={isBlurred} setIsBlurred={setIsBlurred} 
-        startCall={startCall} showMenu={showMenu} setShowMenu={setShowMenu} clearChat={clearChat} 
-        sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} setWallpaper={setWallpaper} navigate={navigate} 
-      />
+       <AnimatePresence>
+          {isSelectionMode ? (
+             <SelectionHeader 
+                selectedCount={selectedIds.size} 
+                onCancel={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}
+                onDelete={deleteMessagesForEveryone}
+             />
+          ) : (
+             <ChatHeader 
+               partnerInfo={partnerInfo} partnerOnline={partnerOnline} isBlurred={isBlurred} 
+               setIsBlurred={setIsBlurred} startCall={startCall} showMenu={showMenu} 
+               setShowMenu={setShowMenu} clearChat={clearChatHistory} 
+               sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} 
+               setWallpaper={setWallpaper} navigate={navigate} 
+             />
+          )}
+       </AnimatePresence>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar">
-        {messages.map((msg, i) => (
-            <MessageBubble 
-              key={msg.id} msg={msg} isMe={msg.senderId === myUserId}
-              isNew={i >= messages.length - 3} selectedMessageId={selectedMessageId}
-              isBlurred={isBlurred} handleMessageTap={handleMessageTap} sendReaction={sendReaction}
-              setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId}
-              sharedKey={sharedKey} setViewMedia={setViewMedia} setFullScreenMap={setFullScreenMap}
-              startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis}
-            />
-        ))}
+          <AnimatePresence>
+            {messages.map((m, idx) => (
+              <MessageBubble 
+                key={m.id} msg={m} isMe={m.senderId === myUserId} isNew={idx === messages.length - 1} 
+                selectedMessageId={selectedMessageId} isBlurred={isBlurred} handleMessageTap={handleMessageTap} 
+                sendReaction={sendReaction} setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId} 
+                sharedKey={sharedKey} setViewMedia={setViewMedia} setFullScreenMap={setFullScreenMap}
+                startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis}
+                isSelectionMode={isSelectionMode} isSelected={selectedIds.has(m.id)}
+                toggleSelectionMode={toggleSelectionMode}
+              />
+            ))}
+          </AnimatePresence>
 
         <AnimatePresence>
           {isPartnerTyping && (
@@ -1066,26 +1132,43 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
 const MessageBubble = React.memo(({ 
   msg, isMe, isNew, selectedMessageId, isBlurred, handleMessageTap, 
   sendReaction, setReplyingTo, setSelectedMessageId, sharedKey, setViewMedia, 
-  setFullScreenMap, startAudioAnalysis, stopAudioAnalysis 
+  setFullScreenMap, startAudioAnalysis, stopAudioAnalysis,
+  isSelectionMode, isSelected, toggleSelectionMode
 }: any) => {
   const pl: ChatPayload = JSON.parse(msg.text);
+  const longPressRef = useRef<any>(null);
+
+  const onLongPress = (e: any) => {
+    e.preventDefault();
+    toggleSelectionMode(msg.id);
+  };
   
   return (
     <motion.div 
       initial={isNew ? { opacity: 0, y: 10, scale: 0.9 } : false} 
       animate={{ opacity: 1, y: 0, scale: 1 }} 
-      className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'}`}
+      className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'} mb-1`}
     >
-      <div 
-        onClick={() => handleMessageTap(msg.id)}
-        className={`relative max-w-[85%] group ${isBlurred ? 'blur-md hover:blur-none transition-all duration-500' : ''}`}
-      >
-        <div className={`
-          px-4 py-2.5 rounded-3xl shadow-lg relative overflow-hidden backdrop-blur-md border animate-in fade-in slide-in-from-bottom-2 duration-300
-          ${isMe ? 'bg-primary/90 text-white border-white/10 rounded-br-none' : 'bg-zinc-800/90 text-zinc-100 border-white/5 rounded-bl-none'}
-          ${selectedMessageId === msg.id ? 'ring-2 ring-white/50 scale-[1.02]' : ''}
-          transition-all duration-200 active:scale-95
-        `}>
+      <div className={`flex items-center space-x-3 w-full ${isMe ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
+        {isSelectionMode && (
+          <div className="flex items-center justify-center w-6 h-6 shrink-0">
+             <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-white/20'}`}>
+                {isSelected && <Check size={12} className="text-white" />}
+             </div>
+          </div>
+        )}
+        
+        <div 
+          onClick={() => handleMessageTap(msg.id)}
+          onContextMenu={(e) => onLongPress(e)}
+          className={`relative max-w-[85%] group ${isBlurred ? 'blur-md hover:blur-none transition-all duration-500' : ''}`}
+        >
+          <div className={`
+            px-4 py-2.5 rounded-3xl shadow-lg relative overflow-hidden backdrop-blur-md border animate-in fade-in slide-in-from-bottom-2 duration-300
+            ${isMe ? 'bg-primary/90 text-white border-white/10 rounded-br-none' : 'bg-zinc-800/90 text-zinc-100 border-white/5 rounded-bl-none'}
+            ${selectedMessageId === msg.id || isSelected ? 'ring-2 ring-white/50 scale-[1.02]' : ''}
+            transition-all duration-200 active:scale-95
+          `}>
           {pl.replyTo && (
             <div className="mb-2 bg-black/20 rounded-lg px-2 py-1.5 border-l-2 border-white/30 text-[10px] opacity-70">
                <p className="font-black uppercase tracking-widest mb-0.5">Response to</p>
@@ -1144,6 +1227,26 @@ const MessageBubble = React.memo(({
     </motion.div>
   );
 });
+
+const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) => (
+  <div className="fixed top-0 w-full z-40 bg-zinc-900 border-b border-white/10 px-4 py-3 flex items-center justify-between animate-in slide-in-from-top duration-300 shadow-2xl">
+    <div className="flex items-center space-x-4">
+      <button onClick={onCancel} className="p-2 text-white/60 hover:text-white transition-all"><X size={24} /></button>
+      <div className="flex flex-col">
+        <span className="text-white font-bold text-base">{selectedCount} Selected</span>
+        <span className="text-white/30 text-[9px] font-black uppercase tracking-widest leading-none">Global Control Active</span>
+      </div>
+    </div>
+    <div className="flex items-center space-x-2">
+       <button 
+          onClick={onDelete}
+          className="bg-red-500/10 border border-red-500/20 text-red-500 px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg"
+       >
+          Delete for Everyone
+       </button>
+    </div>
+  </div>
+));
 
 const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate }: any) => (
   <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-4 py-3 flex items-center justify-between backdrop-blur-xl">

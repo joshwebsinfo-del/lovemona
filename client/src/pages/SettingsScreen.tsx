@@ -312,6 +312,7 @@ export const SettingsScreen: React.FC = () => {
         </div>
 
         {/* LOOK & FEEL */}
+        <div className="space-y-4">
           <div className="flex items-center justify-between mb-2 px-1">
              <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px]">
                 <Palette size={12} />
@@ -502,7 +503,7 @@ export const SettingsScreen: React.FC = () => {
              <div className="flex items-start space-x-4">
                 <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary mt-1">
                    <Bell size={20} />
-                 </div>
+                  </div>
                 <div className="flex-1">
                    <h4 className="text-white font-bold text-[15px]">Push Notifications</h4>
                    <p className="text-white/30 text-xs">Stay synchronized in your private world with background alerts.</p>
