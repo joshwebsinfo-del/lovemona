@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initDB } from '../lib/db';
-import { initSocket, getSocket } from '../lib/socket';
+import { getSocket } from '../lib/socket';
 import { supabase } from '../lib/supabase';
 
 interface Theme {
