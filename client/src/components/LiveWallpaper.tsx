@@ -110,4 +110,4 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type })
       style={{ backgroundImage: `url(${type})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
     />
   );
-});
+}, (prev, next) => prev.type === next.type);

@@ -128,56 +128,69 @@ const AppContent = () => {
     ringtoneSound.current.volume = 0.6;
   }, []);
 
+  const loadAppData = useCallback(async () => {
+    try {
+      const db = await initDB();
+      const [config, p, identity] = await Promise.all([ 
+        db.get('auth', 'pins'), 
+        db.get('partner', 'partner'), 
+        db.get('identity', 'me') 
+      ]);
+      
+      if (config) setAppConfig(config);
+      
+      // Session Persistence
+      const session = localStorage.getItem('lock_session');
+      if (session) {
+         try {
+            const { timestamp, mode } = JSON.parse(session);
+            const oneWeek = 7 * 24 * 60 * 60 * 1000;
+            if (Date.now() - timestamp < oneWeek && mode === 'real') {
+               setIsUnlocked(true);
+               setIsFakeMode(false);
+            }
+         } catch { localStorage.removeItem('lock_session'); }
+      }
+
+      if (p) {
+        setPartner(p);
+        setIsPaired(true);
+        if (identity) {
+           const importedPartnerKey = await importPublicKey(p.publicKeyPem);
+           const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
+           setSharedKey(key);
+           initSocket(identity.userId);
+
+           // PARMANENT: Fetch profile from Cloud to restore Theme/Wallpaper
+           try {
+              const { data: profile } = await supabase.from('users').select('theme, wallpaper, imageUrl').eq('user_id', identity.userId).single();
+              if (profile) {
+                 const currentSettings = await db.get('settings', 'main') || { id: 'main' };
+                 if (!currentSettings.theme || currentSettings.theme !== profile.theme) {
+                    const updatedSettings = { ...currentSettings, theme: profile.theme, wallpaper: profile.wallpaper, imageUrl: profile.imageUrl };
+                    await db.put('settings', updatedSettings);
+                    window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: profile.theme, imageUrl: profile.imageUrl } }));
+                 }
+              }
+           } catch(e) { console.warn('Cloud restore skipped:', e); }
+        }
+        window.dispatchEvent(new CustomEvent('pair:updated'));
+      } else {
+        setIsPaired(false);
+        setPartner(null);
+        setSharedKey(null);
+      }
+    } catch (err) { 
+      console.error('Failed to load app config:', err); 
+    } finally { 
+      setIsLoading(false); 
+    }
+  }, []);
+
   // ── Load app config, partner, identity ──
   useEffect(() => {
-    const load = async () => {
-      try {
-        const db = await initDB();
-        const [config, p, identity] = await Promise.all([ db.get('auth', 'pins'), db.get('partner', 'partner'), db.get('identity', 'me') ]);
-        if (config) setAppConfig(config);
-        
-        // Session Persistence: Check if we have a valid recent unlock
-        const session = localStorage.getItem('lock_session');
-        if (session) {
-           try {
-              const { timestamp, mode } = JSON.parse(session);
-              const oneWeek = 7 * 24 * 60 * 60 * 1000;
-              if (Date.now() - timestamp < oneWeek && mode === 'real') {
-                 setIsUnlocked(true);
-                 setIsFakeMode(false);
-              }
-           } catch { localStorage.removeItem('lock_session'); }
-        }
-
-        if (p) {
-          setPartner(p);
-          setIsPaired(true);
-          if (identity) {
-             const importedPartnerKey = await importPublicKey(p.publicKeyPem);
-             const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
-             setSharedKey(key);
-             initSocket(identity.userId);
-
-             // PARMANENT: Fetch profile from Cloud to restore Theme/Wallpaper if missing or updated
-             try {
-                const { data: profile } = await supabase.from('users').select('nickname, avatar, theme, wallpaper, imageUrl').eq('user_id', identity.userId).single();
-                if (profile) {
-                   const currentSettings = await db.get('settings', 'main') || { id: 'main' };
-                   const needsUpdate = !currentSettings.theme || currentSettings.theme !== profile.theme;
-                   if (needsUpdate) {
-                      const updatedSettings = { ...currentSettings, theme: profile.theme, wallpaper: profile.wallpaper, imageUrl: profile.imageUrl };
-                      await db.put('settings', updatedSettings);
-                      // Trigger visual update for background
-                      window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: profile.theme, imageUrl: profile.imageUrl } }));
-                   }
-                }
-             } catch(e) { console.warn('Cloud restore skipped:', e); }
-          }
-        }
-      } catch (err) { console.error('Failed to load app config:', err); } finally { setIsLoading(false); }
-    };
-    load();
-  }, []);
+    loadAppData();
+  }, [loadAppData]);
 
   // ── Visibility + Global call initiation ──
   const [isBlurred, setIsBlurred] = useState(false);
@@ -738,7 +751,7 @@ const AppContent = () => {
            <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
         </div>
       ) : !isPaired && !isFakeMode ? (
-        <SetupScreen config={appConfig} onPair={() => setIsPaired(true)} />
+        <SetupScreen config={appConfig} onPair={() => { loadAppData(); }} />
       ) : (
         <>
           <div className="flex-1 relative overflow-hidden">

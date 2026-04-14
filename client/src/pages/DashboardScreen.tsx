@@ -258,9 +258,12 @@ export const DashboardScreen = React.memo(() => {
        setShowPushBanner(true);
     }
 
+    window.addEventListener('pair:updated', load);
+    load();
     return () => {
        clearInterval(interval);
        clearInterval(memoryInterval);
+       window.removeEventListener('pair:updated', load);
     };
   }, []);
 

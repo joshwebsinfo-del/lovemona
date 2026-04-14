@@ -346,7 +346,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         console.error('Chat setup error:', e);
       }
     };
+    window.addEventListener('pair:updated', setup);
     setup();
+    return () => window.removeEventListener('pair:updated', setup);
   }, [partnerNickname]);
 
   const scrollToBottom = useCallback(() => {
