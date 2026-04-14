@@ -210,9 +210,9 @@ export const SettingsScreen: React.FC = () => {
                if (syncTheme && (updates.theme || updates.imageUrl)) {
                   const themeObj = themes.find(t => t.id === (updates.theme || theme));
                   if (themeObj && themeObj.type === 'image') {
-                     setWallpaper(themeObj.image);
-                     await db.put('settings', { ...(await db.get('settings', 'main')), wallpaper: themeObj.image });
-                     await supabase.from('users').update({ wallpaper: themeObj.image }).eq('user_id', idRes.userId);
+                     setWallpaper(themeObj.image || '');
+                     await db.put('settings', { ...(await db.get('settings', 'main')), wallpaper: themeObj.image || '' });
+                     await supabase.from('users').update({ wallpaper: themeObj.image || '' }).eq('user_id', idRes.userId);
                   }
                }
 

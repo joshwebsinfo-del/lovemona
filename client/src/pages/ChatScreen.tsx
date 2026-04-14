@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, ShieldCheck, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -1036,7 +1036,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
              <ChatHeader 
                partnerInfo={partnerInfo} partnerOnline={partnerOnline} isBlurred={isBlurred} 
                setIsBlurred={setIsBlurred} startCall={startCall} showMenu={showMenu} 
-               setShowMenu={setShowMenu} clearChat={clearChatHistory} 
+               setShowMenu={setShowMenu} clearChat={clearChat} 
                sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} 
                setWallpaper={setWallpaper} navigate={navigate} 
              />
@@ -1136,7 +1136,6 @@ const MessageBubble = React.memo(({
   isSelectionMode, isSelected, toggleSelectionMode
 }: any) => {
   const pl: ChatPayload = JSON.parse(msg.text);
-  const longPressRef = useRef<any>(null);
 
   const onLongPress = (e: any) => {
     e.preventDefault();
