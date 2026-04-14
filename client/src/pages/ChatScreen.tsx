@@ -1198,7 +1198,10 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
                         { name: 'Nebula', type: 'nebula' },
                         { name: 'Dream', type: 'video:https://cdn.pixabay.com/video/2021/09/01/87134-596489432_tiny.mp4' },
                         { name: 'Aurora', type: 'video:https://cdn.pixabay.com/video/2024/02/09/199738-911226105_tiny.mp4' },
-                        { name: 'Rose', type: 'rose' }
+                        { name: 'Rose', type: 'rose' },
+                        { name: 'Silk', type: '/themes/silk.png' },
+                        { name: 'Midnight', type: '/themes/midnight.png' },
+                        { name: 'Golden', type: '/themes/golden.png' }
                       ].map(w => (
                          <button 
                             key={w.name} 
