@@ -2,7 +2,7 @@
 // It force-deletes the old v1 database if it has an outdated schema.
 
 const DB_NAME = 'SecureLoveDB';
-const REQUIRED_VERSION = 3;
+const REQUIRED_VERSION = 5;
 
 export async function ensureFreshDB(): Promise<void> {
   return new Promise<void>((resolve) => {

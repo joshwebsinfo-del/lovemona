@@ -26,21 +26,25 @@ const DB_VERSION = 5;
 
 export async function initDB(): Promise<IDBPDatabase> {
   const tryOpen = () => openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, _, __, transaction) {
+    upgrade(db, oldVersion, newVersion, transaction) {
+      console.log(`[DB] Upgrading from v${oldVersion} to v${newVersion}`);
       const stores = ['messages', 'vault', 'keys', 'auth', 'identity', 'partner', 'settings'];
       for (const store of stores) {
-        let os;
         if (!db.objectStoreNames.contains(store)) {
-          os = db.createObjectStore(store, { keyPath: 'id' });
-        } else {
-          os = transaction.objectStore(store);
+          console.log(`[DB] Creating store: ${store}`);
+          db.createObjectStore(store, { keyPath: 'id' });
         }
+      }
 
-        if (store === 'messages' || store === 'vault') {
-           if (!os.indexNames.contains('timestamp')) {
-              os.createIndex('timestamp', 'timestamp');
-           }
-        }
+      // Add indexes to existing stores if missing
+      const messagesStore = transaction.objectStore('messages');
+      if (!messagesStore.indexNames.contains('timestamp')) {
+        messagesStore.createIndex('timestamp', 'timestamp');
+      }
+      
+      const vaultStore = transaction.objectStore('vault');
+      if (!vaultStore.indexNames.contains('timestamp')) {
+        vaultStore.createIndex('timestamp', 'timestamp');
       }
     },
   });
@@ -48,10 +52,13 @@ export async function initDB(): Promise<IDBPDatabase> {
   try {
     return await tryOpen();
   } catch (err) {
-    console.warn('DB open failed, resetting database...', err);
+    console.error('[DB] Critical failed to open, resetting database...', err);
     await new Promise<void>((resolve, reject) => {
       const req = indexedDB.deleteDatabase(DB_NAME);
-      req.onsuccess = () => resolve();
+      req.onsuccess = () => {
+        console.warn('[DB] Database wiped successfully.');
+        resolve();
+      };
       req.onerror = () => reject(req.error);
     });
     return await tryOpen();

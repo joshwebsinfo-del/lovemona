@@ -745,7 +745,19 @@ const AppContent = () => {
            <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       ) : !appConfig ? (
-        <PinSetupScreen onComplete={(r,f,n,a) => { const c={id:'pins',realPin:r,fakePin:f,nickname:n,avatar:a}; initDB().then(db=>db.put('auth',c)); setAppConfig(c); }} onRestore={() => window.location.reload()} />
+        <PinSetupScreen 
+          onComplete={async (r, f, n, a) => { 
+            const c: AuthConfig = { id: 'pins', realPin: r, fakePin: f, nickname: n, avatar: a }; 
+            try {
+              const db = await initDB();
+              await db.put('auth', c); 
+              setAppConfig(c); 
+            } catch (e) {
+              console.error('Failed to save setup:', e);
+            }
+          }} 
+          onRestore={() => window.location.reload()} 
+        />
       ) : !isUnlocked ? (
         <div className="flex-1 relative">
            <LockScreen onUnlock={handleUnlock} onReset={() => setAppConfig(null)} />
