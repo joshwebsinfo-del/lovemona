@@ -41,7 +41,7 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
-export const VaultScreen: React.FC = () => {
+export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) => {
   const [items, setItems] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
@@ -273,7 +273,7 @@ export const VaultScreen: React.FC = () => {
 
       {/* LIGHTBOX */}
       <AnimatePresence>
-        {viewItem && <VaultLightbox item={viewItem} onClose={() => setViewItem(null)} />}
+        {viewItem && <VaultLightbox item={viewItem} onClose={() => setViewItem(null)} isLiteMode={isLiteMode} />}
       </AnimatePresence>
 
       {/* UPLOAD BUTTON */}
@@ -289,27 +289,32 @@ export const VaultScreen: React.FC = () => {
 };
 
 // ── LIGHTBOX ──
-const VaultLightbox = ({ item, onClose }: { item: any; onClose: () => void }) => {
+const VaultLightbox = ({ item, onClose, isLiteMode }: { item: any; onClose: () => void; isLiteMode?: boolean }) => {
   const isStorage = typeof item.data === 'string' && item.data.startsWith('storage://');
   const [src, setSrc] = useState(isStorage ? '' : item.data);
   const [loading, setLoading] = useState(isStorage);
 
   useEffect(() => {
     if (!isStorage) return;
+    let url = '';
     (async () => {
       try {
-        const keys = await getKeys();
-        if (!keys) return;
+        const _keys = await getKeys();
+        if (!_keys) return;
         const parts = item.data.replace('storage://', '').split('::');
         const { data, error } = await supabase.storage.from('vault').download(parts[0]);
         if (error) throw error;
         const iv = new Uint8Array(base64ToBuffer(parts[1]));
-        const dec = await decryptBuffer(keys.sharedKey, await data.arrayBuffer(), iv);
-        setSrc(URL.createObjectURL(new Blob([dec])));
+        const dec = await decryptBuffer(_keys.sharedKey, await data.arrayBuffer(), iv);
+        url = URL.createObjectURL(new Blob([dec]));
+        setSrc(url);
       } catch (e) { console.error('Lightbox error:', e); }
       finally { setLoading(false); }
     })();
-  }, [item]);
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [item, isLiteMode]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6">

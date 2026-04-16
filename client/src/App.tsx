@@ -98,6 +98,7 @@ const AppContent = () => {
   const [localFilterIndex, setLocalFilterIndex] = useState(0);
   const [remoteFilter, setRemoteFilter] = useState('none');
   const [reactions, setReactions] = useState<{id: string, emoji: string, x: number}[]>([]);
+  const [isLiteMode, setIsLiteMode] = useState(false);
   const [videoUpgradeRequested, setVideoUpgradeRequested] = useState(false);
   const [lastIncomingGameEvent, setLastIncomingGameEvent] = useState<any>(null);
 
@@ -123,6 +124,19 @@ const AppContent = () => {
 
   // ── Init ringtone ──
   useEffect(() => {
+    // ── Lite Mode Detection ──
+    const checkLiteMode = () => {
+      const saved = localStorage.getItem('lite_mode');
+      if (saved !== null) {
+        setIsLiteMode(saved === 'true');
+      } else if (typeof navigator !== 'undefined' && (navigator as any).deviceMemory) {
+        // Automatically enable Lite Mode for <= 4GB RAM
+        const isLowRam = (navigator as any).deviceMemory <= 4;
+        setIsLiteMode(isLowRam);
+      }
+    };
+    checkLiteMode();
+
     ringtoneSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3');
     ringtoneSound.current.loop = true;
     ringtoneSound.current.volume = 0.6;
@@ -170,6 +184,9 @@ const AppContent = () => {
                     const updatedSettings = { ...currentSettings, theme: profile.theme, wallpaper: profile.wallpaper, imageUrl: profile.imageUrl };
                     await db.put('settings', updatedSettings);
                     window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: profile.theme, imageUrl: profile.imageUrl } }));
+                 }
+                 if ((currentSettings as any).liteMode !== undefined) {
+                    setIsLiteMode((currentSettings as any).liteMode);
                  }
               }
            } catch(e) { console.warn('Cloud restore skipped:', e); }
@@ -239,12 +256,18 @@ const AppContent = () => {
        navigate('/chat');
     };
 
+    const handleLiteModeToggle = (e: CustomEvent) => {
+       setIsLiteMode(e.detail.enabled);
+       localStorage.setItem('lite_mode', e.detail.enabled.toString());
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('start-global-call', handleGlobalCallStart as any);
     window.addEventListener('incoming-game-invite', handleIncomingGameInvite as any);
     window.addEventListener('nav-to-chat', handleNavToChat);
+    window.addEventListener('lite-mode-toggle', handleLiteModeToggle as any);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -253,6 +276,7 @@ const AppContent = () => {
       window.removeEventListener('start-global-call', handleGlobalCallStart as any);
       window.removeEventListener('incoming-game-invite', handleIncomingGameInvite as any);
       window.removeEventListener('nav-to-chat', handleNavToChat);
+      window.removeEventListener('lite-mode-toggle', handleLiteModeToggle as any);
     };
   }, [partner, sharedKey]);
 
@@ -788,11 +812,11 @@ const AppContent = () => {
                     </div>
                   }>
                     <Routes location={location}>
-                      <Route path="/" element={<DashboardScreen />} />
-                      <Route path="/chat" element={<ChatScreen />} />
-                      <Route path="/vault" element={<VaultScreen />} />
+                      <Route path="/" element={<DashboardScreen isLiteMode={isLiteMode} />} />
+                      <Route path="/chat" element={<ChatScreen isLiteMode={isLiteMode} />} />
+                      <Route path="/vault" element={<VaultScreen isLiteMode={isLiteMode} />} />
                       <Route path="/panic" element={<PanicScreen />} />
-                      <Route path="/settings" element={<SettingsScreen />} />
+                      <Route path="/settings" element={<SettingsScreen isLiteMode={isLiteMode} />} />
                     </Routes>
                   </Suspense>
                 )}

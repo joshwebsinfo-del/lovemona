@@ -111,8 +111,10 @@ export const PinSetupScreen: React.FC<PinSetupProps> = ({ onComplete, onRestore 
     }
   };
 
+  const isLite = typeof navigator !== 'undefined' && (navigator as any).deviceMemory && (navigator as any).deviceMemory <= 4;
+
   return (
-    <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center p-6 z-50">
+    <div className={`fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center p-6 z-50 ${isLite ? '' : 'backdrop-blur-xl'}`}>
       <motion.div
         key={step}
         initial={{ opacity: 0, y: 20 }}

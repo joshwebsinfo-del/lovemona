@@ -9,9 +9,11 @@ import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, en
 import { ConnectionHealth } from '../components/ConnectionHealth';
 
 import { LiveWallpaper } from '../components/LiveWallpaper';
+const EmojiPicker = React.lazy(() => import('emoji-picker-react'));
 
 interface ChatScreenProps {
   partnerNickname?: string;
+  isLiteMode?: boolean;
 }
 
 interface SupabaseMessage { id: string; sender_id: string; recipient_id: string; encrypted_payload: string; iv: string; timestamp: number }
@@ -63,6 +65,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
    }, [src, effect]);
 
    React.useEffect(() => {
+      let url = '';
       if (pl.storagePath && pl.storageIv && !src) {
          const loadBlob = async () => {
             try {
@@ -71,7 +74,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
                if (sharedKey) {
                   const iv = new Uint8Array(base64ToBuffer(pl.storageIv!));
                   const dec = await decryptBuffer(sharedKey, await data.arrayBuffer(), iv);
-                  const url = URL.createObjectURL(new Blob([dec], { type: pl.mediaType }));
+                  url = URL.createObjectURL(new Blob([dec], { type: pl.mediaType }));
                   setSrc(url);
                }
             } catch (e) {
@@ -82,6 +85,9 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
          };
          loadBlob();
       }
+      return () => {
+         if (url) URL.revokeObjectURL(url);
+      };
    }, [pl, sharedKey, src]);
 
    if (loading) return <div className="w-44 h-56 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 animate-pulse text-[10px] text-white/30 uppercase tracking-widest font-black">Decrypting...</div>;
@@ -119,7 +125,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
    );
 };
 
-export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
+export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteMode }) => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -166,6 +172,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const activeVoiceEffectRef = useRef<string | null>(null);
 
   // Soundscape States
+  const [showEmoji, setShowEmoji] = useState(false);
+
+  // Soundscape States
   const [audioLevel, setAudioLevel] = useState(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -174,6 +183,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
   const audioSourceMap = useRef<Map<HTMLAudioElement, MediaElementAudioSourceNode>>(new Map());
 
   const startAudioAnalysis = (audioElement: HTMLAudioElement) => {
+    if (isLiteMode) return; // Skip heavy analysis in Lite Mode
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       const ctx = audioCtxRef.current;
@@ -1105,7 +1115,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname }) => {
         startVideoNote={startVideoNote} inputValue={inputValue} handleTyping={handleTyping} 
         handleSendText={handleSendText} startRecording={startRecording} 
         cancelRecording={cancelRecording} stopRecording={stopRecording} 
+        showEmoji={showEmoji} setShowEmoji={setShowEmoji}
       />
+
+      <AnimatePresence>
+        {showEmoji && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed bottom-[180px] left-4 right-4 z-[100] h-[350px] overflow-hidden rounded-3xl border border-white/10 shadow-2xl bg-zinc-900"
+          >
+             <React.Suspense fallback={<div className="h-full w-full bg-zinc-900 flex items-center justify-center text-white/20 text-xs font-black uppercase tracking-widest">Loading Emojis...</div>}>
+               <EmojiPicker 
+                  onEmojiClick={(e: any) => { setInputValue(prev => prev + e.emoji); setShowEmoji(false); }}
+                  theme={'dark' as any}
+                  width="100%"
+                  height="100%"
+               />
+             </React.Suspense>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {viewMedia && (
@@ -1359,7 +1388,7 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
 const ChatInput = React.memo(({ 
   replyingTo, setReplyingTo, isProcessingMedia, isRecording, formatTime, recordDuration, sendLocation, 
   fileInputRef, handleFileUpload, startVideoNote, inputValue, handleTyping, handleSendText, 
-  startRecording, cancelRecording, stopRecording 
+  startRecording, cancelRecording, stopRecording, showEmoji, setShowEmoji
 }: any) => (
   <div className="fixed bottom-0 w-full p-4 pb-12 z-20 bg-gradient-to-t from-[#0a0a0c] via-[#0a0a0c] to-transparent pt-12">
     <div className="flex flex-col space-y-2 relative">
@@ -1399,6 +1428,9 @@ const ChatInput = React.memo(({
            )}
         </div>
         <div className="flex items-center space-x-1.5 ml-1 flex-shrink-0 mr-1">
+           <button onClick={() => setShowEmoji(!showEmoji)} className="w-11 h-11 text-white/30 hover:text-white transition-colors active:scale-90 flex items-center justify-center">
+              <span className="text-xl">😊</span>
+           </button>
            {inputValue.trim() ? (
              <motion.button layoutId="chat-primary-action" onClick={handleSendText} className="w-11 h-11 bg-primary rounded-full flex items-center justify-center text-white active:scale-90 shadow-lg"><Send size={18} className="ml-0.5" /></motion.button>
            ) : isRecording ? (

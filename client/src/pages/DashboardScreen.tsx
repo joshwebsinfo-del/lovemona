@@ -36,7 +36,7 @@ const CountdownWidget = React.memo(({ target }: { target: number }) => {
 
 // --- ROMANTIC FLOATING LIGHTS --- Moved to GlobalBackground
 
-export const DashboardScreen = React.memo(() => {
+export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolean }) => {
   const navigate = useNavigate();
   const [partner, setPartner] = useState<Partner | null>(null);
   const [me, setMe] = useState<AuthConfig | null>(null);
@@ -440,7 +440,7 @@ export const DashboardScreen = React.memo(() => {
          
          {/* STATUS INDICATOR */}
          <div className="flex items-center space-x-3 bg-white/5 backdrop-blur-2xl px-4 py-2 rounded-full border border-white/5 shadow-inner">
-            <Activity size={12} className={`text-primary ${isOnline ? 'animate-pulse' : 'opacity-20'}`} />
+            <Activity size={12} className={`text-primary ${isOnline && !isLiteMode ? 'animate-pulse' : (isOnline ? '' : 'opacity-20')}`} />
             <span className="text-[10px] font-black text-white/40 uppercase tracking-[2px]">{syncStatus.toFixed(2)}% Sync</span>
          </div>
 
@@ -459,11 +459,13 @@ export const DashboardScreen = React.memo(() => {
            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
            className="relative mb-6"
          >
-            <motion.div 
-              animate={isOnline ? { scale: [1, 1.1, 1], opacity: [0.2, 0.4, 0.2] } : {}}
-              transition={{ repeat: Infinity, duration: 4 }}
-              className="absolute inset-[-12px] rounded-[54px] border border-primary/20 blur-[2px]"
-            />
+            {!isLiteMode && (
+               <motion.div 
+                 animate={isOnline ? { scale: [1, 1.1, 1], opacity: [0.2, 0.4, 0.2] } : {}}
+                 transition={{ repeat: Infinity, duration: 4 }}
+                 className="absolute inset-[-12px] rounded-[54px] border border-primary/20 blur-[2px]"
+               />
+            )}
             <div className="relative w-36 h-36 rounded-[56px] bg-zinc-900 p-1 shadow-[0_0_40px_rgba(255,107,0,0.15)] ring-1 ring-white/5">
                <img 
                  src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'partner'}`} 

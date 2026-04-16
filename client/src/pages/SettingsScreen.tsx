@@ -1,6 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check, Lock, Bell } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, User, Shield, Palette, Image as ImageIcon, Trash2, Heart, Check, Lock, Bell, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -8,7 +8,7 @@ import { importPublicKey, deriveSharedSecret, encryptMessage } from '../lib/cryp
 import { getSocket } from '../lib/socket';
 import { useNotifications } from '../components/NotificationProvider';
 
-export const SettingsScreen: React.FC = () => {
+export const SettingsScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode: initialLiteMode }) => {
   const { showNotification, subscribeToPush, sendTestPush, isPushSupported } = useNotifications();
   const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
@@ -19,6 +19,7 @@ export const SettingsScreen: React.FC = () => {
   const [myId, setMyId] = useState('');
   const [partnerId, setPartnerId] = useState('');
   const [syncTheme, setSyncTheme] = useState(true); // Unified Theme Experience
+  const [isLiteMode, setIsLiteMode] = useState(initialLiteMode || false);
 
   const themes = [
     { id: 'passionate', label: 'Passionate', color: 'bg-rose-500', type: 'gradient' },
@@ -59,6 +60,7 @@ export const SettingsScreen: React.FC = () => {
         setTheme(settings.theme || 'passionate');
         setWallpaper(settings.wallpaper || '');
         if (settings.syncTheme !== undefined) setSyncTheme(settings.syncTheme);
+        if (settings.liteMode !== undefined) setIsLiteMode(settings.liteMode);
       }
 
       const identity = await db.get('identity', 'me');
@@ -261,6 +263,12 @@ export const SettingsScreen: React.FC = () => {
     window.location.href = '/'; // Hard reload to clear App state and show LockScreen
   };
 
+  const toggleLiteMode = (enabled: boolean) => {
+    setIsLiteMode(enabled);
+    window.dispatchEvent(new CustomEvent('lite-mode-toggle', { detail: { enabled } }));
+    saveSettings({ liteMode: enabled });
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#050505] p-6 no-scrollbar overflow-y-auto w-full">
       <div className="pt-14 pb-8 flex items-center">
@@ -311,7 +319,31 @@ export const SettingsScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* LOOK & FEEL */}
+        {/* PERFORMANCE / LITE MODE */}
+        <div className="space-y-4">
+          <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px] ml-1">
+             <Activity size={12} />
+             <span>Performance</span>
+          </label>
+          <div className="bg-zinc-900/50 rounded-[32px] p-6 border border-white/5 flex items-center justify-between">
+             <div className="flex flex-col">
+                <h4 className="text-white font-bold text-[15px]">Lite Mode</h4>
+                <p className="text-white/30 text-[10px] uppercase tracking-wider">Fast & RAM Efficient</p>
+             </div>
+             <button 
+                onClick={() => toggleLiteMode(!isLiteMode)}
+                className={`w-14 h-8 rounded-full transition-all relative ${isLiteMode ? 'bg-primary' : 'bg-white/10'}`}
+             >
+                <motion.div 
+                   animate={{ x: isLiteMode ? 24 : 4 }}
+                   className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-lg"
+                />
+             </button>
+          </div>
+          <p className="text-[9px] text-white/20 px-2 leading-relaxed">
+             Optimizes memory usage for low-RAM devices by simplifying animations and virtualizing lists.
+          </p>
+        </div>
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2 px-1">
              <label className="flex items-center space-x-2 text-[10px] font-black text-white/20 uppercase tracking-[4px]">

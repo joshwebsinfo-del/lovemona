@@ -273,6 +273,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
     }
   };
 
+  const isLite = typeof navigator !== 'undefined' && (navigator as any).deviceMemory && (navigator as any).deviceMemory <= 4;
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-[#0a0a0c] p-10 text-center">
@@ -286,10 +288,12 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] safe-top safe-bottom p-6 overflow-hidden relative">
       {/* GLOWING BACKDROP */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
-      </div>
+      {!isLite && (
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {mode === 'decision' && (
