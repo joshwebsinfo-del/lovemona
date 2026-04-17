@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface LiveWallpaperProps {
   type: string;
@@ -7,6 +7,15 @@ interface LiveWallpaperProps {
 }
 
 export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type }) => {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   if (!type) return null;
 
   // --- NEBULA (CSS-only, no JS animations) ---
@@ -14,14 +23,14 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type })
     return (
       <div className="absolute inset-0 overflow-hidden bg-black pointer-events-none z-0">
         <div 
-          className="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] blur-[100px]"
+          className={`absolute top-[-20%] left-[-20%] w-[140%] h-[140%] ${reducedMotion ? 'blur-[30px]' : 'blur-[100px]'} will-change-transform`}
           style={{
             background: 'radial-gradient(ellipse at 30% 40%, rgba(88,28,135,0.4), transparent 70%)',
             animation: 'nebula-pulse 20s ease-in-out infinite',
           }}
         />
         <div 
-          className="absolute bottom-[-20%] right-[-20%] w-[140%] h-[140%] blur-[100px]"
+          className={`absolute bottom-[-20%] right-[-20%] w-[140%] h-[140%] ${reducedMotion ? 'blur-[30px]' : 'blur-[100px]'} will-change-transform`}
           style={{
             background: 'radial-gradient(ellipse at 70% 60%, rgba(30,27,75,0.4), transparent 70%)',
             animation: 'nebula-pulse 25s ease-in-out infinite reverse',
@@ -42,7 +51,7 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type })
     return (
       <div className="absolute inset-0 overflow-hidden bg-[#000814] pointer-events-none z-0">
         <div 
-          className="absolute inset-x-0 top-0 h-full bg-gradient-to-b from-cyan-900/20 to-transparent blur-3xl"
+          className={`absolute inset-x-0 top-0 h-full bg-gradient-to-b from-cyan-900/20 to-transparent ${reducedMotion ? 'blur-[10px]' : 'blur-3xl'} will-change-transform`}
           style={{ animation: 'ocean-wave 10s ease-in-out infinite' }}
         />
         <style>{`
@@ -84,7 +93,7 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type })
   }
 
   // --- LIVE VIDEO WALLPAPERS ---
-  if (typeof type === 'string' && type.startsWith('video:')) {
+  if (typeof type === 'string' && type.startsWith('video:') && !reducedMotion) {
     const url = type.split('video:')[1];
     return (
       <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none z-0">

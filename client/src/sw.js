@@ -1,7 +1,19 @@
 import { precacheAndRoute } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { CacheFirst } from 'workbox-strategies';
 
 // Workbox will inject the manifest here
-precacheAndRoute(self.__WB_MANIFEST);
+// Runtime caching for video assets (mobile performance)
+registerRoute(
+  ({request}) => request.destination === 'video',
+  new CacheFirst({
+    cacheName: 'video-cache',
+    plugins: [],
+    // Keep videos for 30 days
+    maxAgeSeconds: 30 * 24 * 60 * 60,
+  })
+);
+
 
 // Handle Push Events
 self.addEventListener('push', (event) => {

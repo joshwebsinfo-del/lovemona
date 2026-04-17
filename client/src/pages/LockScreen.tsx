@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldAlert, X, Lock, CheckCircle } from 'lucide-react';
 import { initDB } from '../lib/db';
@@ -12,6 +12,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   const [display, setDisplay] = useState('');
   const [dots, setDots] = useState<boolean[]>(new Array(6).fill(false));
   const [showRescue, setShowRescue] = useState(false);
+  const keyPressTimeout = useRef<number | null>(null);
   const [rescueId, setRescueId] = useState('');
   const [rescueError, setRescueError] = useState('');
   
@@ -68,13 +69,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   }, [display]);
 
   const handleKeyPress = (num: string) => {
-    if (display.length < 6) {
-      const newDisplay = display + num;
-      setDisplay(newDisplay);
-      const newDots = [...dots];
-      newDots[newDisplay.length - 1] = true;
-      setDots(newDots);
-    }
+    if (keyPressTimeout.current) clearTimeout(keyPressTimeout.current);
+    keyPressTimeout.current = window.setTimeout(() => {
+      if (display.length < 6) {
+        const newDisplay = display + num;
+        setDisplay(newDisplay);
+        const newDots = [...dots];
+        newDots[newDisplay.length - 1] = true;
+        setDots(newDots);
+      }
+    }, 50);
   };
 
   const handleUnlockClick = () => {
@@ -110,7 +114,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
   };
 
   return (
-    <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center p-4 z-50 overflow-hidden">
+    <div className="fixed inset-0 bg-[#0a0a0c] flex flex-col items-center justify-center p-4 z-50 overflow-hidden" style={{ touchAction: 'manipulation' }}>
       <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-primary/10" />
       
       <div className="w-full max-w-xs py-4 relative z-10">
@@ -123,10 +127,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock, onReset }) => 
           
           <div className="flex justify-center space-x-4 mt-8">
             {dots.map((active, i) => (
-              <motion.div
+              <div
                 key={i}
-                animate={{ scale: active ? 1.25 : 1, backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.1)' }}
-                className={`w-3.5 h-3.5 rounded-full border border-white/5`}
+                className={`w-3.5 h-3.5 rounded-full border border-white/5 ${active ? 'bg-white scale-125' : 'bg-white/10'} transition-all duration-200`}
               />
             ))}
           </div>
