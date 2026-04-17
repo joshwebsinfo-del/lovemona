@@ -798,7 +798,7 @@ const AppContent = () => {
                 animate={{ opacity: 1 }} 
                 exit={{ opacity: 0 }} 
                 transition={{ duration: 0.2 }} 
-                className="absolute inset-0"
+                className="absolute inset-0 will-change-opacity"
               >
                 {isFakeMode ? (
                   <div className="h-full bg-black flex items-center justify-center text-white/20 font-mono text-xs uppercase tracking-widest">

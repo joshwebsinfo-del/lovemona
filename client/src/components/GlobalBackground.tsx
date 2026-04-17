@@ -14,6 +14,8 @@ interface Theme {
 export const GlobalBackground: React.FC = () => {
   const [theme, setTheme] = useState<Theme>({ id: 'default', type: 'gradient', color: 'from-zinc-800 via-zinc-950 to-black' });
   const [personalization, setPersonalization] = useState('Mona & Josh');
+  const [isLiteMode, setIsLiteMode] = useState(false);
+
   
   useEffect(() => {
     const load = async () => {
@@ -29,9 +31,11 @@ export const GlobalBackground: React.FC = () => {
           setPersonalization(`${auth.nickname} & ...`);
        }
 
-       if (settings && settings.theme) {
-          applyThemeById(settings.theme, settings.imageUrl);
+       if (settings) {
+          if (settings.theme) applyThemeById(settings.theme, settings.imageUrl);
+          if (settings.liteMode !== undefined) setIsLiteMode(settings.liteMode);
        }
+
 
        // Listen for mood/theme signals
        const s = getSocket();
@@ -59,8 +63,13 @@ export const GlobalBackground: React.FC = () => {
        const { mood, imageUrl } = e.detail;
        applyThemeById(mood, imageUrl);
     };
-    window.addEventListener('theme-updated', handleThemeChange as any);
-    return () => window.removeEventListener('theme-updated', handleThemeChange as any);
+     const handleLiteToggle = (e: any) => setIsLiteMode(e.detail.enabled);
+     window.addEventListener('theme-updated', handleThemeChange as any);
+     window.addEventListener('lite-mode-toggle', handleLiteToggle as any);
+     return () => {
+        window.removeEventListener('theme-updated', handleThemeChange as any);
+        window.removeEventListener('lite-mode-toggle', handleLiteToggle as any);
+     };
   }, []);
 
   const applyThemeById = (id: string, customUrl?: string) => {
@@ -91,8 +100,8 @@ export const GlobalBackground: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 1.5, ease: "easeInOut" }}
-          className="absolute inset-0"
+          transition={{ duration: isLiteMode ? 0.5 : 1.5, ease: "easeInOut" }}
+          className="absolute inset-0 will-change-opacity"
         >
           {theme.type === 'gradient' ? (
              <div className={`absolute inset-0 bg-gradient-to-b ${theme.color}`} />
@@ -102,33 +111,34 @@ export const GlobalBackground: React.FC = () => {
                   src={theme.image} 
                   initial={{ scale: 1.1 }}
                   animate={{ scale: 1 }}
-                  transition={{ duration: 20, repeat: Infinity, repeatType: 'reverse', ease: "linear" }}
-                  className="absolute inset-0 w-full h-full object-cover opacity-60" 
+                  transition={{ duration: isLiteMode ? 0 : 20, repeat: Infinity, repeatType: 'reverse', ease: "linear" }}
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 will-change-transform" 
                />
                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black" />
              </>
           )}
 
-          {/* ROMANTIC ATMOSPHERE OVERLAY */}
-          <div className="absolute inset-0">
-             <motion.div 
-               animate={{ 
-                 scale: [1, 1.15, 1],
-                 opacity: [0.1, 0.2, 0.1],
-               }}
-               transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-               className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/5 blur-[150px] rounded-full" 
-             />
-             {[0.15, 0.45, 0.75, 0.25, 0.85, 0.55].map((val, i) => (
-               <motion.div
-                 key={i}
-                 initial={{ y: '110vh', x: `${val * 100}vw`, opacity: 0 }}
-                 animate={{ y: '-10vh', opacity: [0, 0.3, 0] }}
-                 transition={{ duration: val * 8 + 12, repeat: Infinity, delay: i * 3 }}
-                 className="absolute w-1 h-1 bg-white rounded-full blur-[1px]"
-               />
-             ))}
-          </div>
+          {!isLiteMode && (
+             <div className="absolute inset-0">
+                <motion.div 
+                  animate={{ 
+                    scale: [1, 1.15, 1],
+                    opacity: [0.1, 0.2, 0.1],
+                  }}
+                  transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                  className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/5 blur-[150px] rounded-full will-change-transform" 
+                />
+                {[0.15, 0.45, 0.75, 0.25, 0.85, 0.55].map((val, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ y: '110vh', x: `${val * 100}vw`, opacity: 0 }}
+                    animate={{ y: '-10vh', opacity: [0, 0.3, 0] }}
+                    transition={{ duration: val * 8 + 12, repeat: Infinity, delay: i * 3 }}
+                    className="absolute w-1 h-1 bg-white rounded-full blur-[1px] will-change-transform"
+                  />
+                ))}
+             </div>
+          )}
 
           {/* DYNAMIC PERSONALIZATION: MONA & JOSH */}
           <div className="absolute inset-x-0 bottom-[15%] flex flex-col items-center justify-center opacity-30 select-none">

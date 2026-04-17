@@ -1076,6 +1076,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
                setWallpaper={setWallpaper} navigate={navigate} 
                socketConnected={socketConnected} sharedKey={sharedKey}
                repairConnection={repairConnection}
+               isLiteMode={isLiteMode}
              />
           )}
        </AnimatePresence>
@@ -1304,21 +1305,21 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
   </div>
 ));
 
-const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection }: any) => (
-  <div className="fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-4 py-3 flex items-center justify-between backdrop-blur-xl">
-    <div className="flex items-center space-x-3">
-      <button onClick={() => navigate('/')} className="p-2 -ml-2 text-white/40 hover:text-white transition-colors active:scale-90">
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection, isLiteMode }: any) => (
+  <div className={`fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-2 sm:px-4 py-3 flex items-center justify-between ${isLiteMode ? '' : 'backdrop-blur-xl'}`}>
+    <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 pr-2">
+      <button onClick={() => navigate('/')} className="p-2 -ml-1 sm:-ml-2 text-white/40 hover:text-white transition-colors active:scale-90 shrink-0">
          <ChevronLeft size={24} />
       </button>
-      <div className="relative">
+      <div className="relative shrink-0">
         {partnerOnline && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0c] z-10" />}
-        <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
+        <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
           <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" loading="lazy" />
         </div>
-        <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
+        <div className={`absolute bottom-0 right-0 w-3 h-3 sm:w-3.5 sm:h-3.5 border-2 border-[#0a0a0c] rounded-full ${partnerOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-white/20'}`} />
       </div>
       <div className="flex-1 min-w-0">
-        <h2 className="text-white font-bold truncate">{partnerInfo.nick || 'Partner'}</h2>
+        <h2 className="text-white font-bold truncate text-sm sm:text-base">{partnerInfo.nick || 'Partner'}</h2>
         <div className="flex items-center space-x-2 mt-0.5">
           <ConnectionHealth 
             isSocketConnected={socketConnected}
@@ -1329,15 +1330,15 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
       </div>
     </div>
     
-    <div className="flex items-center space-x-3 text-white/60">
-       <button onClick={() => setIsBlurred(!isBlurred)} className={`p-2.5 rounded-full active:scale-95 transition-all ${isBlurred ? 'bg-primary/20 text-primary' : 'text-white/60 hover:bg-white/10'}`}>
-         {isBlurred ? <EyeOff size={20} /> : <Eye size={20} />}
+    <div className="flex items-center space-x-1 sm:space-x-3 text-white/60 shrink-0">
+       <button onClick={() => setIsBlurred(!isBlurred)} className={`p-2 sm:p-2.5 rounded-full active:scale-95 transition-all ${isBlurred ? 'bg-primary/20 text-primary' : 'text-white/60 hover:bg-white/10'}`}>
+         {isBlurred ? <EyeOff size={18} className="sm:size-5" /> : <Eye size={18} className="sm:size-5" />}
        </button>
-      <button onClick={() => startCall('voice')} className="hover:text-white transition-colors active:scale-95"><Phone size={22} /></button>
-      <button onClick={() => startCall('video')} className="hover:text-white transition-colors active:scale-95"><Video size={24} /></button>
+      <button onClick={() => startCall('voice')} className="p-2 hover:text-white transition-colors active:scale-95"><Phone size={20} className="sm:size-5.5" /></button>
+      <button onClick={() => startCall('video')} className="p-2 hover:text-white transition-colors active:scale-95"><Video size={20} className="sm:size-6" /></button>
       <div className="relative">
-        <button onClick={() => setShowMenu(!showMenu)} className="hover:text-white transition-colors">
-          <MoreVertical size={24} />
+        <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:text-white transition-colors active:scale-95">
+          <MoreVertical size={20} className="sm:size-6" />
         </button>
         <AnimatePresence>
           {showMenu && (

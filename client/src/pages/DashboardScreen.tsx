@@ -457,7 +457,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
       <div className="flex-1 flex flex-col items-center justify-center -mt-6 z-10 px-8">
          <motion.div 
            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-           className="relative mb-6"
+           className="relative mb-6 will-change-transform"
          >
             {!isLiteMode && (
                <motion.div 
@@ -555,7 +555,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                <div className="absolute right-[-5%] top-[-50%] p-5 opacity-[0.03] group-hover:rotate-12 group-hover:scale-110 transition-all duration-500">
                   <MessageCircle size={120} />
                </div>
-               <div className="flex flex-col text-left relative z-10">
+               <div className="flex flex-col text-left relative z-10 will-change-transform">
                   <span className="text-xl font-black tracking-tighter leading-none mb-1 text-black">OUR WORLD</span>
                   <span className="text-[9px] font-bold uppercase tracking-[2px] opacity-40">Private Connection</span>
                </div>
@@ -599,7 +599,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
             >
                {vaultMemory ? (
                  <div className="absolute inset-0">
-                    <img src={vaultMemory} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700" alt="Vault Memory" />
+                    <img src={vaultMemory} className={`w-full h-full object-cover opacity-60 transition-all duration-700 ${!isLiteMode ? 'group-hover:opacity-100 group-hover:scale-110' : ''}`} alt="Vault Memory" />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1c] via-[#1a1a1c]/20 to-transparent" />
                  </div>
                ) : (
@@ -694,12 +694,12 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                            <motion.div 
                               initial={{ width: 0 }} 
                               animate={{ width: `${(myWins / (myWins + partnerWins + 0.001)) * 100}%` }}
-                              className="h-full bg-primary"
+                              className="h-full bg-primary will-change-[width]"
                            />
                            <motion.div 
                               initial={{ width: 0 }} 
                               animate={{ width: `${(partnerWins / (myWins + partnerWins + 0.001)) * 100}%` }}
-                              className="h-full bg-white/20"
+                              className="h-full bg-white/20 will-change-[width]"
                            />
                         </div>
                      </div>

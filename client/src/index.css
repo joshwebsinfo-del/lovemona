@@ -132,3 +132,26 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+
+/* liquid-layout for ultra-mobile responsiveness */
+.liquid-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .performance-blur {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+}
+
+/* Optimization for long lists */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 100px;
+}

@@ -222,7 +222,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
       <main className="pt-40 pb-36 px-6">
         <AnimatePresence mode="wait">
           {!activeCategory ? (
-            <motion.div key="folders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="grid grid-cols-2 gap-5">
+            <motion.div key="folders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="grid grid-cols-2 gap-5 will-change-transform">
               <button onClick={() => setActiveCategory('photo')} className="group relative h-48 rounded-3xl overflow-hidden bg-white/5 border border-white/10 active:scale-95 transition-all">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500 to-indigo-600 opacity-0 group-hover:opacity-10 transition-opacity" />
                 <div className="absolute inset-0 flex flex-col items-center justify-center space-y-3">
@@ -246,7 +246,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
               </button>
             </motion.div>
           ) : (
-            <motion.div key="grid" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}>
+            <motion.div key="grid" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="will-change-transform">
               <button onClick={() => setActiveCategory(null)} className="flex items-center text-white/40 text-sm font-bold mb-6 hover:text-white transition-colors">
                 <span className="mr-2">←</span> Back
               </button>
@@ -317,7 +317,7 @@ const VaultLightbox = ({ item, onClose, isLiteMode }: { item: any; onClose: () =
   }, [item, isLiteMode]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-6 will-change-opacity">
       <button onClick={onClose} className="absolute top-8 right-8 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95 z-10"><X size={24} /></button>
       <div className="w-full max-w-lg">
         <div className="rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-zinc-900/50 min-h-[200px] flex items-center justify-center">
