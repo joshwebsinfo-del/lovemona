@@ -7,15 +7,6 @@ interface LiveWallpaperProps {
 }
 
 export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type }) => {
-  const [reducedMotion, setReducedMotion] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReducedMotion(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
   if (!type) return null;
 
   // --- NEBULA (Static) ---
@@ -57,7 +48,6 @@ export const LiveWallpaper: React.FC<LiveWallpaperProps> = React.memo(({ type })
 
   // --- VIDEO WALLPAPERS (Disabled live playback) ---
   if (typeof type === 'string' && type.startsWith('video:')) {
-    const url = type.split('video:')[1];
     return (
       <div className="absolute inset-0 bg-black overflow-hidden pointer-events-none z-0">
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />

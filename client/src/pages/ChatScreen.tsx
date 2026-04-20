@@ -1299,7 +1299,7 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
   </div>
 ));
 
-const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection, isLiteMode }: any) => (
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection }: any) => (
   <div className={`fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-2 sm:px-4 py-3 flex items-center justify-between`}>
     <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 pr-2">
       <button onClick={() => navigate('/')} className="p-2 -ml-1 sm:-ml-2 text-white/40 hover:text-white transition-colors active:scale-90 shrink-0">

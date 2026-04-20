@@ -13,7 +13,6 @@ interface Theme {
 export const GlobalBackground: React.FC = () => {
   const [theme, setTheme] = useState<Theme>({ id: 'default', type: 'gradient', color: 'from-zinc-800 via-zinc-950 to-black' });
   const [personalization, setPersonalization] = useState('Mona & Josh');
-  const [isLiteMode, setIsLiteMode] = useState(false);
 
   
   useEffect(() => {
