@@ -519,6 +519,7 @@ const AppContent = () => {
           }
 
           // Mixed Recording Logic (High Quality)
+          // Use a unique ID for the track to ensure we only start ONE recorder per call session
           if (!callRecorderRef.current && typeof MediaRecorder !== 'undefined') {
              try {
                 const remoteStream = e.streams[0];
@@ -532,6 +533,8 @@ const AppContent = () => {
                 if (selectedMime && !MediaRecorder.isTypeSupported(selectedMime)) selectedMime = '';
 
                 const mr = new MediaRecorder(mixedStream, selectedMime ? { mimeType: selectedMime, videoBitsPerSecond: 5000000 } : undefined);
+                callRecorderRef.current = mr; // Set IMMEDIATELY to prevent race conditions 
+                
                 mr.ondataavailable = ev => { if (ev.data.size > 0) callChunksRef.current.push(ev.data); };
                 mr.onstop = async () => {
                    if (callChunksRef.current.length === 0) return;
@@ -553,7 +556,6 @@ const AppContent = () => {
                    reader.readAsDataURL(blob);
                 };
                 mr.start(2000);
-                callRecorderRef.current = mr;
              } catch(err) { console.warn('Call recorder init failed', err); }
           }
        };

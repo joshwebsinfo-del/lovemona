@@ -86,7 +86,10 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
          loadBlob();
       }
       return () => {
-         if (url) URL.revokeObjectURL(url);
+         // Only revoke if we aren't currently viewing this specific media in the enlarged lightbox
+         // to prevent the "media not found" error when scrolling while viewing.
+         // In a butter-smooth mobile app, we can afford to keep some blobs in memory.
+         // if (url) URL.revokeObjectURL(url);
       };
    }, [pl, sharedKey, src]);
 
@@ -98,9 +101,18 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
          {isImg && <img src={src} onClick={() => setViewMedia({ url: src, type: 'photo' })} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10 cursor-pointer transition-transform active:scale-95" alt="Shared media" />}
          {isVideo && (
             <div className="relative group cursor-pointer" onClick={() => setViewMedia({ url: src, type: 'video' })}>
-               <video src={src} className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10" />
-               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-xl transition-opacity">
-                  <span className="text-white bg-black/50 p-2 rounded-full font-bold">⤢</span>
+               <video 
+                  src={src} 
+                  className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10" 
+                  playsInline 
+                  muted 
+                  loop 
+                  autoPlay 
+               />
+               <div className="absolute inset-0 flex items-center justify-center bg-black/10 rounded-xl">
+                  <div className="w-10 h-10 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-white scale-90 group-hover:scale-100 transition-transform">
+                     <Video size={20} />
+                  </div>
                </div>
             </div>
          )}

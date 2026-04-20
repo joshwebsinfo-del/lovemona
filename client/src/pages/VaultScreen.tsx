@@ -49,6 +49,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
   const [syncProgress, setSyncProgress] = useState(0);
   const [activeCategory, setActiveCategory] = useState<'photo' | 'video' | null>(null);
   const [viewItem, setViewItem] = useState<any>(null);
+  const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── LOAD VAULT ──
@@ -60,6 +61,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
 
     const keys = await getKeys();
     if (!keys) return;
+    setSharedKey(keys.sharedKey);
 
     setIsSyncing(true);
     setSyncProgress(0);
@@ -219,6 +221,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
       </header>
 
       {/* CONTENT */}
+
       <main className="pt-40 pb-36 px-6">
         <AnimatePresence mode="wait">
           {!activeCategory ? (
@@ -256,14 +259,10 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
                   <p>Empty</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-3">
-                  {shown.map((item: any) => (
-                    <div key={item.id} onClick={() => setViewItem(item)} className="aspect-square bg-white/5 rounded-2xl border border-white/10 p-1 relative group cursor-pointer active:scale-95 transition-all overflow-hidden content-auto">
-                      {item.type === 'photo' && <img src={item.data} className="w-full h-full object-cover rounded-xl" alt="" loading="lazy" />}
-                      {item.type === 'video' && <div className="w-full h-full flex items-center justify-center bg-zinc-900 rounded-xl"><Video size={20} className="text-white/20" /></div>}
-                      <button onClick={(e) => deleteItem(item.id, e)} className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400"><Trash2 size={12} /></button>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-32">
+                   {shown.map((item: any) => (
+                     <VaultGridItem key={item.id} item={item} setViewItem={setViewItem} deleteItem={deleteItem} sharedKey={sharedKey} />
+                   ))}
                 </div>
               )}
             </motion.div>
@@ -343,3 +342,68 @@ const VaultLightbox = ({ item, onClose, isLiteMode }: { item: any; onClose: () =
     </motion.div>
   );
 };
+
+// --- SUB-COMPONENTS ---
+
+const VaultGridItem = React.memo(({ item, setViewItem, deleteItem, sharedKey }: any) => {
+  const isStorage = item.data.startsWith('storage://');
+  const [previewSrc, setPreviewSrc] = useState(isStorage ? '' : item.data);
+  const [loading, setLoading] = useState(isStorage);
+
+  useEffect(() => {
+    if (!isStorage) return;
+    let url = '';
+    const loadPreview = async () => {
+      try {
+        const parts = item.data.replace('storage://', '').split('::');
+        const path = parts[0];
+        const ivB64 = parts[1];
+        const { data, error } = await supabase.storage.from('vault').download(path);
+        if (error) throw error;
+        if (sharedKey) {
+          const iv = new Uint8Array(base64ToBuffer(ivB64));
+          const dec = await decryptBuffer(sharedKey, await data.arrayBuffer(), iv);
+          url = URL.createObjectURL(new Blob([dec], { type: item.type === 'photo' ? 'image/jpeg' : 'video/mp4' }));
+          setPreviewSrc(url);
+        }
+      } catch (e) {
+        console.error('Vault preview fail:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPreview();
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [item.id, sharedKey]); 
+
+  return (
+    <div onClick={() => setViewItem(item)} className="aspect-square bg-white/5 rounded-2xl border border-white/10 p-1 relative group cursor-pointer active:scale-95 transition-all overflow-hidden content-auto">
+      {loading ? (
+        <div className="w-full h-full flex items-center justify-center bg-zinc-900/50 rounded-xl">
+           <div className="w-4 h-4 border border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      ) : (
+        <>
+          {item.type === 'photo' && <img src={previewSrc} className="w-full h-full object-cover rounded-xl" alt="" loading="lazy" />}
+          {item.type === 'video' && (
+             <div className="w-full h-full relative rounded-xl overflow-hidden">
+                {previewSrc ? (
+                   <video src={previewSrc} className="w-full h-full object-cover" muted playsInline />
+                ) : (
+                   <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+                      <Video size={16} className="text-white/20" />
+                   </div>
+                )}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                   <Video size={14} className="text-white/60" />
+                </div>
+             </div>
+          )}
+        </>
+      )}
+      <button onClick={(e) => deleteItem(item.id, e)} className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400">
+        <Trash2 size={12} />
+      </button>
+    </div>
+  );
+});

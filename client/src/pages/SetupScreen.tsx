@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield } from 'lucide-react';
+import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield, ChevronRight } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import jsQR from 'jsqr';
 import { initSocket } from '../lib/socket';
@@ -27,6 +27,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const [error, setError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
   const [enteredPartnerId, setEnteredPartnerId] = useState('');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -149,6 +150,25 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
     }
     animFrameRef.current = requestAnimationFrame(scanFrame);
   }
+
+  useEffect(() => {
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) {
+       showNotification({ title: 'App Installed?', message: 'If you don\'t see the prompt, check your browser menu for "Install App" or "Add to Home Screen".', type: 'system' });
+       return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setDeferredPrompt(null);
+  };
 
   useEffect(() => {
     const setupIdentity = async () => {
@@ -364,6 +384,22 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
 
               {/* FEATURE CAROUSEL */}
               <div className="pt-8 w-full">
+                <button 
+                  onClick={handleInstallApp}
+                  className="w-full h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-[24px] border border-primary/20 flex items-center justify-between px-6 group active:scale-95 transition-all mb-4"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary">
+                      <Zap size={20} />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-primary">Permanent Access</div>
+                      <div className="text-[13px] font-bold text-white">Install MONA Mobile</div>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} className="text-white/20 group-hover:text-primary transition-colors" />
+                </button>
+
                 <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2">
                   {[
                     { icon: <Shield size={16}/>, title: 'E2E Encryption', desc: 'True privacy' },
