@@ -162,7 +162,11 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
-       showNotification({ title: 'App Installed?', message: 'If you don\'t see the prompt, check your browser menu for "Install App" or "Add to Home Screen".', type: 'system' });
+       showNotification({ 
+         title: 'Manual Install', 
+         message: 'To install MONA: 1. Tap the Share icon (iOS) or Menu (Android). 2. Select "Add to Home Screen".', 
+         type: 'system' 
+       });
        return;
     }
     deferredPrompt.prompt();

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Camera, Mic, Phone, Video, MoreVertical, Fingerprint, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check } from 'lucide-react';
+import { Send, Camera, Mic, Phone, Video, MoreVertical, Fingerprint, X, Volume2, Eye, EyeOff, MapPin, Wand2, ChevronLeft, Check, Share2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { type Message, initDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
@@ -103,11 +103,13 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
             <div className="relative group cursor-pointer" onClick={() => setViewMedia({ url: src, type: 'video' })}>
                <video 
                   src={src} 
+                  key={src}
                   className="max-h-56 max-w-44 object-cover rounded-xl shadow-md border border-white/10" 
                   playsInline 
                   muted 
                   loop 
                   autoPlay 
+                  onLoadedData={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
                />
                <div className="absolute inset-0 flex items-center justify-center bg-black/10 rounded-xl">
                   <div className="w-10 h-10 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center text-white scale-90 group-hover:scale-100 transition-transform">
@@ -1201,17 +1203,47 @@ const MessageBubble = React.memo(({
   isSelectionMode, isSelected, toggleSelectionMode
 }: any) => {
   const pl: ChatPayload = JSON.parse(msg.text);
+  const [swipeX, setSwipeX] = useState(0);
+  const touchStart = useRef(0);
 
   const onLongPress = (e: any) => {
     e.preventDefault();
     toggleSelectionMode(msg.id);
   };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isSelectionMode) return;
+    const delta = e.touches[0].clientX - touchStart.current;
+    if (delta > 0 && delta < 80) setSwipeX(delta);
+  };
+
+  const handleTouchEnd = () => {
+    if (swipeX > 50) {
+      setReplyingTo(msg);
+      if (window.navigator.vibrate) window.navigator.vibrate(10);
+    }
+    setSwipeX(0);
+  };
   
   return (
     <div 
       className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'} mb-1 content-auto ${isNew ? 'animate-fade-in' : ''}`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ transform: `translateX(${swipeX}px)`, transition: swipeX === 0 ? 'transform 0.2s ease-out' : 'none' }}
     >
       <div className={`flex items-center space-x-3 w-full ${isMe ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
+        {swipeX > 30 && (
+          <div className="absolute -left-10 flex items-center justify-center text-primary/40">
+            <Share2 size={24} className="animate-pulse" />
+          </div>
+        )}
+
         {isSelectionMode && (
           <div className="flex items-center justify-center w-6 h-6 shrink-0">
              <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-white/20'}`}>
@@ -1249,7 +1281,12 @@ const MessageBubble = React.memo(({
 
           {pl.type === 'location' && (
              <div onClick={() => setFullScreenMap({ lat: pl.lat!, lng: pl.lng! })} className="w-48 h-32 rounded-xl overflow-hidden mt-1 relative border border-white/10 cursor-pointer group/map">
-                <img src={`https://maps.googleapis.com/maps/api/staticmap?center=${pl.lat},${pl.lng}&zoom=15&size=300x200&maptype=satellite&key=YOUR_API_KEY_OR_PUBLIC_FALLBACK&markers=color:red%7C${pl.lat},${pl.lng}`} className="w-full h-full object-cover" alt="Location Map" />
+                <img 
+                  src={`https://static-maps.yandex.ru/1.x/?ll=${pl.lng},${pl.lat}&z=14&l=sat,skl&size=300,200&pt=${pl.lng},${pl.lat},pm2rdm`} 
+                  className="w-full h-full object-cover" 
+                  alt="Location Map" 
+                  onError={(e: any) => e.target.src = 'https://www.openstreetmap.org/assets/embed-map-78e7f53a.png'}
+                />
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/map:opacity-100 transition-opacity">
                    <div className="bg-primary px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-xl">Open Map</div>
                 </div>
