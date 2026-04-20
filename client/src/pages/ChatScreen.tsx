@@ -435,7 +435,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
 
         if (payload.type === 'identity:sync') {
            setPartnerInfo(prev => ({ ...prev, nick: payload.nick || prev.nick, avatar: payload.avatar || prev.avatar }));
-           // Better to just db.get then db.put
            const db = await initDB();
            const p = await db.get('partner', 'partner');
            if (p) {
@@ -444,11 +443,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
            return;
         }
 
-           return;
-        }
-
         if (payload.type === 'location:live' && payload.lat && payload.lng) {
-           setPartnerLiveLocation({ lat: payload.lat!, lng: payload.lng! });
+           setPartnerLiveLocation({ lat: payload.lat, lng: payload.lng });
            return;
         }
         
@@ -723,8 +719,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
         console.error('❌ Tracking Error:', err);
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-    );
-  };ut: 20000, maximumAge: 0 }
     );
   };
 
