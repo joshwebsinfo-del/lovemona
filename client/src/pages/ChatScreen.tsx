@@ -256,7 +256,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
 
   const stopAudioAnalysis = () => {
     if (animationIdRef.current) cancelAnimationFrame(animationIdRef.current);
-    setAudioLevel(0);
   };
 
   // Setup keys and history
