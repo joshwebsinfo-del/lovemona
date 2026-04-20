@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { initDB } from '../lib/db';
 import { getSocket } from '../lib/socket';
 import { supabase } from '../lib/supabase';
@@ -94,71 +93,31 @@ export const GlobalBackground: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
-      <AnimatePresence mode="wait">
-        <motion.div
+        <div
           key={theme.id + (theme.image || '')}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: isLiteMode ? 0.5 : 1.5, ease: "easeInOut" }}
-          className="absolute inset-0 will-change-opacity"
+          className="absolute inset-0 transition-opacity duration-500"
         >
           {theme.type === 'gradient' ? (
              <div className={`absolute inset-0 bg-gradient-to-b ${theme.color}`} />
           ) : (
              <>
-               <motion.img 
-                  src={theme.image} 
-                  initial={{ scale: 1.1 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: isLiteMode ? 0 : 20, repeat: Infinity, repeatType: 'reverse', ease: "linear" }}
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 will-change-transform" 
-               />
+                <img 
+                   src={theme.image} 
+                   className="absolute inset-0 w-full h-full object-cover opacity-60" 
+                   loading="lazy"
+                />
                <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black" />
              </>
           )}
 
-          {!isLiteMode && (
-             <div className="absolute inset-0">
-                <motion.div 
-                  animate={{ 
-                    scale: [1, 1.15, 1],
-                    opacity: [0.1, 0.2, 0.1],
-                  }}
-                  transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                  className="absolute top-[-20%] left-[-10%] w-[100vw] h-[100vw] bg-rose-500/5 blur-[150px] rounded-full will-change-transform" 
-                />
-                {[0.15, 0.45, 0.75, 0.25, 0.85, 0.55].map((val, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ y: '110vh', x: `${val * 100}vw`, opacity: 0 }}
-                    animate={{ y: '-10vh', opacity: [0, 0.3, 0] }}
-                    transition={{ duration: val * 8 + 12, repeat: Infinity, delay: i * 3 }}
-                    className="absolute w-1 h-1 bg-white rounded-full blur-[1px] will-change-transform"
-                  />
-                ))}
-             </div>
-          )}
-
-          {/* DYNAMIC PERSONALIZATION: MONA & JOSH */}
+          {/* DYNAMIC PERSONALIZATION */}
           <div className="absolute inset-x-0 bottom-[15%] flex flex-col items-center justify-center opacity-30 select-none">
-             <motion.span 
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 1, duration: 2 }}
-                className="text-4xl sm:text-5xl font-['Great_Vibes'] text-white tracking-widest text-center px-10 drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]"
-             >
+             <span className="text-4xl sm:text-5xl font-['Great_Vibes'] text-white tracking-widest text-center px-10 drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
                 {personalization}
-             </motion.span>
-             <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: 60 }}
-                transition={{ delay: 2, duration: 1.5 }}
-                className="h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent mt-4" 
-             />
+             </span>
+             <div className="h-[1px] bg-gradient-to-r from-transparent via-white/40 to-transparent mt-4 w-[60px]" />
           </div>
-        </motion.div>
-      </AnimatePresence>
+        </div>
     </div>
   );
 };

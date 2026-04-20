@@ -23,7 +23,7 @@ export const ConnectionHealth: React.FC<ConnectionHealthProps> = ({
 
   return (
     <div className={`flex items-center space-x-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 ${color} transition-colors duration-500`}>
-      <Icon size={14} className="animate-pulse" />
+      <Icon size={14} />
       <span className="text-[10px] font-bold uppercase tracking-widest">{label}</span>
       
       {!isPartnerOnline && isSocketConnected && (

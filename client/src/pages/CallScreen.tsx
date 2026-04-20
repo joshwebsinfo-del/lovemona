@@ -60,7 +60,7 @@ const GameArenaBackdrop = () => (
     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200%] h-[200%] opacity-20">
       <div className="w-full h-full" style={{ background: 'radial-gradient(circle, #3b82f6 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
     </div>
-    <div className="absolute inset-0 animate-pulse bg-purple-500/5 blur-[100px] rounded-full scale-150" />
+    <div className="absolute inset-0 bg-purple-500/5 blur-[100px] rounded-full scale-150" />
   </div>
 );
 
@@ -411,7 +411,7 @@ export function CallScreen({
             {incoming ? (
               callType === 'game' ? (
                 <div className="flex flex-col items-center w-full max-w-[280px]">
-                   <div className="w-20 h-20 bg-secondary/20 rounded-3xl flex items-center justify-center mb-6 border border-secondary/30 animate-pulse">
+                   <div className="w-20 h-20 bg-secondary/20 rounded-3xl flex items-center justify-center mb-6 border border-secondary/30">
                       <Gamepad2 className="text-secondary" size={40} />
                    </div>
                    <h2 className="text-white text-2xl font-black tracking-tighter mb-1 uppercase italic">Game Challenge</h2>
@@ -478,7 +478,7 @@ export function CallScreen({
          {/* READY OVERLAY */}
          {activeGame && !isGameReady && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 60, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}>
-               <div className="w-20 h-20 bg-secondary/20 rounded-full flex items-center justify-center mb-6 animate-bounce">
+               <div className="w-20 h-20 bg-secondary/20 rounded-full flex items-center justify-center mb-6">
                   <Gamepad2 className="text-secondary" size={40} />
                </div>
                <h2 className="text-white text-3xl font-black italic tracking-tighter mb-2 uppercase">{activeGame.replace('_', ' ')}</h2>

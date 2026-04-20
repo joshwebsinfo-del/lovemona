@@ -215,7 +215,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
             <motion.div initial={{ width: 0 }} animate={{ width: `${syncProgress}%` }} className="h-full bg-primary" />
           </div>
         )}
-        {uploadStatus && <div className="mt-2 text-[10px] text-primary font-bold uppercase tracking-widest animate-pulse">{uploadStatus}</div>}
+        {uploadStatus && <div className="mt-2 text-[10px] text-primary font-bold uppercase tracking-widest">{uploadStatus}</div>}
       </header>
 
       {/* CONTENT */}
@@ -258,10 +258,10 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
               ) : (
                 <div className="grid grid-cols-3 gap-3">
                   {shown.map((item: any) => (
-                    <div key={item.id} onClick={() => setViewItem(item)} className="aspect-square bg-white/5 rounded-2xl border border-white/10 p-1 relative group cursor-pointer active:scale-95 transition-all overflow-hidden">
-                      {item.type === 'photo' && <img src={item.data} className="w-full h-full object-cover rounded-xl" alt="" />}
+                    <div key={item.id} onClick={() => setViewItem(item)} className="aspect-square bg-white/5 rounded-2xl border border-white/10 p-1 relative group cursor-pointer active:scale-95 transition-all overflow-hidden content-auto">
+                      {item.type === 'photo' && <img src={item.data} className="w-full h-full object-cover rounded-xl" alt="" loading="lazy" />}
                       {item.type === 'video' && <div className="w-full h-full flex items-center justify-center bg-zinc-900 rounded-xl"><Video size={20} className="text-white/20" /></div>}
-                      <button onClick={(e) => deleteItem(item.id, e)} className="absolute top-2 right-2 p-1.5 bg-black/60 backdrop-blur-md rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400"><Trash2 size={12} /></button>
+                      <button onClick={(e) => deleteItem(item.id, e)} className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-red-400"><Trash2 size={12} /></button>
                     </div>
                   ))}
                 </div>

@@ -290,8 +290,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
       {/* GLOWING BACKDROP */}
       {!isLite && (
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full animate-pulse" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+          <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-primary/10 blur-[120px] rounded-full" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary/5 blur-[120px] rounded-full" />
         </div>
       )}
 
@@ -462,7 +462,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                 <div className="absolute inset-0 border-[40px] border-black/60 pointer-events-none">
                   <div className="relative w-full h-full">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 border-4 border-primary/50 rounded-[48px]">
-                      <div className="absolute inset-0 bg-primary/20 animate-pulse rounded-[44px]" />
+                      <div className="absolute inset-0 bg-primary/20 rounded-[44px]" />
                     </div>
                   </div>
                 </div>

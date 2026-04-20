@@ -166,7 +166,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 toast.action?.();
                 setToasts(prev => prev.filter(t => t.id !== toast.id));
               }}
-              className="pointer-events-auto w-full max-w-sm bg-[#1a1a1e]/90 backdrop-blur-2xl border border-white/10 rounded-2xl p-4 shadow-2xl flex items-center space-x-4 cursor-pointer active:scale-95 transition-transform"
+              className="pointer-events-auto w-full max-w-sm bg-[#1a1a1e]/95 border border-white/10 rounded-2xl p-4 shadow-2xl flex items-center space-x-4 cursor-pointer active:scale-95 transition-transform"
             >
               <div className="relative flex-shrink-0">
                 {toast.avatar ? (
@@ -183,7 +183,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                     {toast.type === 'success' && <Info size={24} />}
                   </div>
                 )}
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-[#1a1a1e] animate-pulse" />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-[#1a1a1e]" />
               </div>
 
               <div className="flex-1 min-w-0">

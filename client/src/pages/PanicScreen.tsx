@@ -159,7 +159,7 @@ export const PanicScreen: React.FC = () => {
               <button
                 onClick={performNuke}
                 disabled={nuking}
-                className="w-full h-16 bg-red-500 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-red-500/30 flex items-center justify-center animate-pulse"
+                className="w-full h-16 bg-red-500 text-white rounded-2xl font-bold text-lg shadow-2xl shadow-red-500/30 flex items-center justify-center"
               >
                 {nuking ? 'Sanitizing Device...' : 'CONFIRM: NUKE EVERYTHING'}
               </button>

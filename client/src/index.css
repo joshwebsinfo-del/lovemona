@@ -17,16 +17,21 @@
   body {
     @apply bg-background text-white antialiased overflow-x-hidden;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    /* Removed external texture URL — it blocked rendering on slow connections */
     background-image: 
-      radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
-      radial-gradient(circle at 80% 70%, rgba(239, 68, 68, 0.05) 0%, transparent 40%),
-      url("https://www.transparenttextures.com/patterns/stardust.png");
+      radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(239, 68, 68, 0.04) 0%, transparent 40%);
     
     /* Anti-Screenshot / Interaction Protection */
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     -webkit-user-drag: none;
+
+    /* Smooth scrolling + touch optimizations */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: manipulation;
   }
   
   /* Allow text selection only inside input fields */
@@ -37,13 +42,14 @@
 }
 
 @utility glass {
-  @apply bg-white/5 backdrop-blur-lg border border-white/10;
+  @apply bg-white/5 border border-white/10;
+  /* backdrop-blur moved to @media for mobile perf */
 }
 
 @utility glass-card {
   @apply glass rounded-2xl p-4 shadow-xl;
-  will-change: transform, opacity;
   transform: translateZ(0);
+  contain: layout style;
 }
 
 @utility btn-primary {
@@ -72,7 +78,7 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Animations */
+/* Animations — limited to reduce mobile GPU pressure */
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
@@ -83,12 +89,12 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .animate-fade-in {
-  animation: fade-in 0.15s ease-out both;
+  animation: fade-in 0.1s ease-out both;
 }
 
 /* Hide scrollbar but keep scroll */
@@ -124,13 +130,11 @@
 .gpu-accelerated {
   transform: translateZ(0);
   backface-visibility: hidden;
-  perspective: 1000px;
-  will-change: transform, opacity;
 }
 
 .performance-blur {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* liquid-layout for ultra-mobile responsiveness */
@@ -145,13 +149,28 @@
 
 @media (max-width: 640px) {
   .performance-blur {
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  
+  /* Kill all backdrop-blur on mobile for smooth scrolling */
+  * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }
 
 /* Optimization for long lists */
 .content-auto {
   content-visibility: auto;
-  contain-intrinsic-size: 0 100px;
+  contain-intrinsic-size: 0 80px;
+}
+
+/* Smooth scrollable areas */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scroll-behavior: auto; /* avoid smooth scroll during rapid input */
+  will-change: scroll-position;
+  contain: strict;
 }

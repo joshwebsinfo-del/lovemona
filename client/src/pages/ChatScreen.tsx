@@ -90,7 +90,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
       };
    }, [pl, sharedKey, src]);
 
-   if (loading) return <div className="w-44 h-56 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 animate-pulse text-[10px] text-white/30 uppercase tracking-widest font-black">Decrypting...</div>;
+   if (loading) return <div className="w-44 h-56 flex items-center justify-center bg-white/5 rounded-xl border border-white/10 text-[10px] text-white/30 uppercase tracking-widest font-black">Decrypting...</div>;
    if (!src) return <div className="w-44 h-56 flex items-center justify-center bg-red-500/10 rounded-xl border border-red-500/20 text-[10px] text-red-500/50 uppercase tracking-widest font-black">Media Unavailable</div>;
 
    return (
@@ -1045,16 +1045,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a0a0c] z-0 pointer-events-none" />
 
       {isVideoRecording && (
-         <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center pt-20 pb-40">
+         <div className="absolute inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center pt-20 pb-40">
             <h2 className="text-white/60 text-xs mb-8 uppercase tracking-widest bg-white/5 py-1.5 px-6 rounded-full border border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.1)]">Video Note Recording</h2>
             <div className="relative w-full max-w-[320px] aspect-[3/4] rounded-[40px] overflow-hidden shadow-[0_0_60px_rgba(239,68,68,0.3)] border-2 border-red-500/30">
                <video ref={videoPreviewRef} className="w-full h-full object-cover" muted playsInline />
-               <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-red-400 font-black text-sm tracking-widest border border-red-500/30">
+               <div className="absolute top-4 right-4 bg-black/60 px-3 py-1 rounded-full text-red-400 font-black text-sm tracking-widest border border-red-500/30">
                   {formatTime(recordDuration)}
                </div>
             </div>
             <div className="absolute bottom-16 flex space-x-6 items-center">
-               <button onClick={cancelRecording} className="w-14 h-14 bg-white/10 backdrop-blur-md border border-white/20 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform hover:bg-white/20"><X size={24} /></button>
+               <button onClick={cancelRecording} className="w-14 h-14 bg-white/10 border border-white/20 rounded-full flex items-center justify-center text-white active:scale-95 transition-transform hover:bg-white/20"><X size={24} /></button>
                <button onClick={stopVideoNote} className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white active:scale-95 shadow-[0_0_40px_rgba(239,68,68,0.6)] transition-transform hover:bg-red-400"><Send size={32} /></button>
             </div>
          </div>
@@ -1081,32 +1081,28 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
           )}
        </AnimatePresence>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar">
-          <AnimatePresence>
-            {messages.map((m, idx) => (
-              <MessageBubble 
-                key={m.id} msg={m} isMe={m.senderId === myUserId} isNew={idx === messages.length - 1} 
-                selectedMessageId={selectedMessageId} isBlurred={isBlurred} handleMessageTap={handleMessageTap} 
-                sendReaction={sendReaction} setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId} 
-                sharedKey={sharedKey} setViewMedia={setViewMedia} setFullScreenMap={setFullScreenMap}
-                startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis}
-                isSelectionMode={isSelectionMode} isSelected={selectedIds.has(m.id)}
-                toggleSelectionMode={toggleSelectionMode}
-              />
-            ))}
-          </AnimatePresence>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar scroll-container" style={{ contain: 'content' }}>
+             {messages.map((m, idx) => (
+               <MessageBubble 
+                 key={m.id} msg={m} isMe={m.senderId === myUserId} isNew={idx === messages.length - 1} 
+                 selectedMessageId={selectedMessageId} isBlurred={isBlurred} handleMessageTap={handleMessageTap} 
+                 sendReaction={sendReaction} setReplyingTo={setReplyingTo} setSelectedMessageId={setSelectedMessageId} 
+                 sharedKey={sharedKey} setViewMedia={setViewMedia} setFullScreenMap={setFullScreenMap}
+                 startAudioAnalysis={startAudioAnalysis} stopAudioAnalysis={stopAudioAnalysis}
+                 isSelectionMode={isSelectionMode} isSelected={selectedIds.has(m.id)}
+                 toggleSelectionMode={toggleSelectionMode}
+               />
+             ))}
 
-        <AnimatePresence>
-          {isPartnerTyping && (
-             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className="flex justify-start w-full">
-                <div className="bg-zinc-800/80 backdrop-blur-md px-4 py-3 rounded-2xl rounded-bl-sm border border-white/5 flex items-center space-x-1.5">
-                   <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                   <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                   <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"></div>
-                </div>
-             </motion.div>
-          )}
-        </AnimatePresence>
+        {isPartnerTyping && (
+              <div className="flex justify-start w-full animate-fade-in">
+                 <div className="bg-zinc-800/80 px-4 py-3 rounded-2xl rounded-bl-sm border border-white/5 flex items-center space-x-1.5">
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce"></div>
+                 </div>
+              </div>
+           )}
       </div>
 
       <ChatInput 
@@ -1139,7 +1135,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
 
       <AnimatePresence>
         {viewMedia && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-md flex flex-col justify-center items-center">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[110] bg-black/95 flex flex-col justify-center items-center">
             <button onClick={() => setViewMedia(null)} className="absolute top-6 right-6 w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white active:scale-95 z-10"><X size={24} /></button>
             {viewMedia.type === 'photo' && <img src={viewMedia.url} className="max-w-full max-h-full object-contain" alt="Enlarged" />}
             {viewMedia.type === 'video' && <video src={viewMedia.url} className="max-w-full max-h-full" controls autoPlay />}
@@ -1157,7 +1153,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
                   <div>
                     <h3 className="text-white font-bold text-sm tracking-wide">Live Location</h3>
                     <div className="flex items-center space-x-1.5">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
+                      <div className="w-2 h-2 bg-green-500 rounded-full" />
                       <p className="text-green-400 text-[10px] uppercase font-black tracking-widest leading-none">High-Detail Hybrid</p>
                     </div>
                   </div>
@@ -1200,10 +1196,8 @@ const MessageBubble = React.memo(({
   };
   
   return (
-    <motion.div 
-      initial={isNew ? { opacity: 0, y: 10, scale: 0.9 } : false} 
-      animate={{ opacity: 1, y: 0, scale: 1 }} 
-      className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'} mb-1`}
+    <div 
+      className={`flex flex-col w-full ${isMe ? 'items-end' : 'items-start'} mb-1 content-auto ${isNew ? 'animate-fade-in' : ''}`}
     >
       <div className={`flex items-center space-x-3 w-full ${isMe ? 'flex-row-reverse space-x-reverse' : 'flex-row'}`}>
         {isSelectionMode && (
@@ -1220,10 +1214,10 @@ const MessageBubble = React.memo(({
           className={`relative max-w-[85%] group ${isBlurred ? 'blur-md hover:blur-none transition-all duration-500' : ''}`}
         >
           <div className={`
-            px-4 py-2.5 rounded-3xl shadow-lg relative overflow-hidden backdrop-blur-md border animate-in fade-in slide-in-from-bottom-2 duration-300
+            px-4 py-2.5 rounded-3xl shadow-lg relative overflow-hidden border
             ${isMe ? 'bg-primary/90 text-white border-white/10 rounded-br-none' : 'bg-zinc-800/90 text-zinc-100 border-white/5 rounded-bl-none'}
             ${selectedMessageId === msg.id || isSelected ? 'ring-2 ring-white/50 scale-[1.02]' : ''}
-            transition-all duration-200 active:scale-95
+            transition-transform duration-150 active:scale-95
           `}>
           {pl.replyTo && (
             <div className="mb-2 bg-black/20 rounded-lg px-2 py-1.5 border-l-2 border-white/30 text-[10px] opacity-70">
@@ -1247,7 +1241,7 @@ const MessageBubble = React.memo(({
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/map:opacity-100 transition-opacity">
                    <div className="bg-primary px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest text-white shadow-xl">Open Map</div>
                 </div>
-                <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center space-x-1.5">
+                <div className="absolute top-2 left-2 bg-black/60 px-2 py-0.5 rounded-lg border border-white/10 flex items-center space-x-1.5">
                    <MapPin size={10} className="text-primary" />
                    <span className="text-[9px] font-bold text-white/80">Satellite Live</span>
                 </div>
@@ -1255,7 +1249,7 @@ const MessageBubble = React.memo(({
           )}
 
           {msg.reaction && (
-            <div className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} bg-zinc-900 border border-white/10 rounded-full px-1.5 py-0.5 text-xs shadow-xl animate-bounce`}>
+            <div className={`absolute -bottom-2 ${isMe ? '-left-2' : '-right-2'} bg-zinc-900 border border-white/10 rounded-full px-1.5 py-0.5 text-xs shadow-xl`}>
               {msg.reaction}
             </div>
           )}
@@ -1270,7 +1264,7 @@ const MessageBubble = React.memo(({
 
         <AnimatePresence>
           {selectedMessageId === msg.id && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className={`absolute top-full mt-2 z-20 flex bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-1.5 shadow-2xl space-x-2 ${isMe ? 'right-0' : 'left-0'}`}>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} className={`absolute top-full mt-2 z-20 flex bg-zinc-900/95 border border-white/10 rounded-2xl p-1.5 shadow-2xl space-x-2 ${isMe ? 'right-0' : 'left-0'}`}>
               {['❤️', '🔥', '😂', '😮', '😢', '👍'].map(emoji => (
                 <button key={emoji} onClick={(e) => { e.stopPropagation(); sendReaction(msg.id, emoji); }} className="p-1.5 hover:bg-white/10 rounded-lg text-lg transition-transform hover:scale-125 active:scale-90">{emoji}</button>
               ))}
@@ -1281,8 +1275,8 @@ const MessageBubble = React.memo(({
         </AnimatePresence>
       </div>
     </div>
-  </motion.div>
-);
+  </div>
+  );
 });
 
 const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) => (
@@ -1306,7 +1300,7 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
 ));
 
 const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection, isLiteMode }: any) => (
-  <div className={`fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-2 sm:px-4 py-3 flex items-center justify-between ${isLiteMode ? '' : 'backdrop-blur-xl'}`}>
+  <div className={`fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-2 sm:px-4 py-3 flex items-center justify-between`}>
     <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 pr-2">
       <button onClick={() => navigate('/')} className="p-2 -ml-1 sm:-ml-2 text-white/40 hover:text-white transition-colors active:scale-90 shrink-0">
          <ChevronLeft size={24} />
@@ -1407,12 +1401,12 @@ const ChatInput = React.memo(({
          )}
       </AnimatePresence>
 
-      <div className="w-full flex items-center bg-[#151518]/95 backdrop-blur-3xl border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
+      <div className="w-full flex items-center bg-[#151518]/95 border border-white/5 rounded-[40px] px-2 py-2 relative min-h-[60px] shadow-2xl overflow-hidden">
         {isProcessingMedia && <div className="absolute inset-0 bg-black/60 rounded-[40px] flex items-center justify-center z-10 backdrop-blur-sm"><div className="w-5 h-5 border-2 border-primary/50 border-t-primary rounded-full animate-spin" /></div>}
         <div className="flex-1 flex items-center min-w-0">
            {isRecording ? (
              <div className="flex-1 flex items-center px-4">
-                <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-ping" /><span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
+                <div className="w-2.5 h-2.5 bg-red-500 rounded-full mr-3 animate-pulse" /><span className="text-red-400 font-bold tracking-widest text-sm">{formatTime(recordDuration)}</span>
                 <div className="ml-auto text-[10px] text-white/40 uppercase tracking-widest font-black mr-2">Recording</div>
              </div>
            ) : (
@@ -1480,7 +1474,7 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
             className: 'custom-map-marker',
             html: `
               <div class="relative flex items-center justify-center">
-                <div class="absolute w-12 h-12 bg-primary/30 rounded-full animate-ping"></div>
+                <div class="absolute w-12 h-12 bg-primary/30 rounded-full opacity-50"></div>
                 <div class="relative w-5 h-5 bg-primary border-2 border-white rounded-full shadow-2xl"></div>
               </div>
             `,

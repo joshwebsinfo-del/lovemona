@@ -263,9 +263,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
     };
     load();
 
-    const interval = setInterval(() => {
-       setSyncStatus(s => s + (Math.random() > 0.5 ? 0.005 : -0.005));
-    }, 4000);
+    // Removed syncStatus interval — was causing re-renders every 4s for no value
 
     // Cycle vault memories
     const memoryInterval = setInterval(async () => {
@@ -275,7 +273,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
        if (localPhotos.length > 0) {
            setVaultMemory(localPhotos[Math.floor(Math.random() * localPhotos.length)].data);
        }
-    }, 15000);
+    }, 60000);  // 60s instead of 15s — much less IDB pressure
 
     // Check for push permission
     if ('Notification' in window && Notification.permission !== 'granted') {
@@ -285,7 +283,6 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
     window.addEventListener('pair:updated', load);
     load();
     return () => {
-       clearInterval(interval);
        clearInterval(memoryInterval);
        window.removeEventListener('pair:updated', load);
     };
@@ -394,10 +391,10 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            className="fixed top-24 left-6 right-6 z-[100] bg-primary/20 backdrop-blur-3xl border border-primary/30 rounded-3xl p-5 shadow-2xl flex items-center justify-between"
+            className="fixed top-24 left-6 right-6 z-[100] bg-primary/20 border border-primary/30 rounded-3xl p-5 shadow-2xl flex items-center justify-between"
           >
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg animate-pulse">
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg">
                 <Bell size={24} />
               </div>
               <div className="flex flex-col">
@@ -430,42 +427,34 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
 
       {/* COMPACT TOP BAR */}
       <div className="pt-12 px-8 flex justify-between items-center z-20">
-         <motion.button 
-           whileTap={{ scale: 0.9 }}
-           onClick={() => navigate('/settings')}
-           className="w-11 h-11 bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/5 flex items-center justify-center text-white/40 shadow-inner"
+         <button
+            onClick={() => navigate('/settings')}
+           className="w-11 h-11 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center text-white/40 shadow-inner"
          >
             <Settings size={18} />
-         </motion.button>
+         </button>
          
          {/* STATUS INDICATOR */}
-         <div className="flex items-center space-x-3 bg-white/5 backdrop-blur-2xl px-4 py-2 rounded-full border border-white/5 shadow-inner">
-            <Activity size={12} className={`text-primary ${isOnline && !isLiteMode ? 'animate-pulse' : (isOnline ? '' : 'opacity-20')}`} />
+         <div className="flex items-center space-x-3 bg-white/5 px-4 py-2 rounded-full border border-white/5 shadow-inner">
+            <Activity size={12} className={`text-primary ${isOnline ? '' : 'opacity-20'}`} />
             <span className="text-[10px] font-black text-white/40 uppercase tracking-[2px]">{syncStatus.toFixed(2)}% Sync</span>
          </div>
 
-         <motion.button 
-           whileTap={{ scale: 0.9 }}
-           onClick={() => navigate('/vault')}
-           className="w-11 h-11 bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/5 flex items-center justify-center text-white/40 shadow-inner"
+         <button
+            onClick={() => navigate('/vault')}
+           className="w-11 h-11 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center text-white/40 shadow-inner"
          >
             <Lock size={18} />
-         </motion.button>
+         </button>
       </div>
 
       {/* HERO PARTNER SECTION - MINI */}
       <div className="flex-1 flex flex-col items-center justify-center -mt-6 z-10 px-8">
          <motion.div 
            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-           className="relative mb-6 will-change-transform"
+           className="relative mb-6"
          >
-            {!isLiteMode && (
-               <motion.div 
-                 animate={isOnline ? { scale: [1, 1.1, 1], opacity: [0.2, 0.4, 0.2] } : {}}
-                 transition={{ repeat: Infinity, duration: 4 }}
-                 className="absolute inset-[-12px] rounded-[54px] border border-primary/20 blur-[2px]"
-               />
-            )}
+
             <div className="relative w-36 h-36 rounded-[56px] bg-zinc-900 p-1 shadow-[0_0_40px_rgba(255,107,0,0.15)] ring-1 ring-white/5">
                <img 
                  src={partner?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner?.userId || 'partner'}`} 
@@ -496,7 +485,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
                className="flex items-center justify-center space-x-2"
              >
-                <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]' : 'bg-white/20'}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-white/20'}`} />
                 <p className="text-white/40 text-[11px] font-black uppercase tracking-[3px]">
                    {isTyping ? 'Whispering secrets...' : (isOnline ? 'Active' : 'Offline')}
                 </p>
@@ -547,15 +536,14 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
 
           <div className="grid grid-cols-2 gap-4">
             {/* OUR WORLD */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={() => navigate('/chat')}
                className="col-span-2 h-20 rounded-[28px] bg-white text-black flex items-center justify-between px-8 shadow-[0_20px_40px_rgba(0,0,0,0.3)] relative overflow-hidden group"
             >
                <div className="absolute right-[-5%] top-[-50%] p-5 opacity-[0.03] group-hover:rotate-12 group-hover:scale-110 transition-all duration-500">
                   <MessageCircle size={120} />
                </div>
-               <div className="flex flex-col text-left relative z-10 will-change-transform">
+               <div className="flex flex-col text-left relative z-10">
                   <span className="text-xl font-black tracking-tighter leading-none mb-1 text-black">OUR WORLD</span>
                   <span className="text-[9px] font-bold uppercase tracking-[2px] opacity-40">Private Connection</span>
                </div>
@@ -571,29 +559,26 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                     )}
                   </AnimatePresence>
                </div>
-            </motion.button>
+            </button>
 
             {/* CALLS */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'voice' } }))}
                className="h-20 col-span-1 rounded-[24px] bg-sky-500/90 text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group relative overflow-hidden backdrop-blur-md"
             >
                <Phone size={24} fill="currentColor" className="mb-1.5 group-hover:scale-110 transition-transform opacity-90" />
                <span className="text-[9px] font-black uppercase tracking-wider">Voice</span>
-            </motion.button>
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            </button>
+            <button
                onClick={() => window.dispatchEvent(new CustomEvent('start-global-call', { detail: { type: 'video' } }))}
                className="h-20 col-span-1 rounded-[24px] bg-primary text-white flex flex-col items-center justify-center shadow-lg active:scale-95 group relative overflow-hidden"
             >
                <Video size={24} fill="currentColor" className="mb-1.5 group-hover:scale-110 transition-transform opacity-90" />
                <span className="text-[9px] font-black uppercase tracking-wider">Video</span>
-            </motion.button>
+            </button>
 
             {/* VAULT POLAROID */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={() => navigate('/vault')}
                className="h-32 col-span-1 rounded-[24px] bg-[#1a1a1c] border border-white/10 flex flex-col items-start justify-between p-4 shadow-xl relative overflow-hidden group p-0"
             >
@@ -608,7 +593,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                  </div>
                )}
                <div className="relative z-10 p-4 h-full flex flex-col justify-between w-full">
-                  <div className="w-7 h-7 bg-white/10 backdrop-blur-md rounded-lg flex items-center justify-center text-white border border-white/20">
+                  <div className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center text-white border border-white/20">
                      <Lock size={14} />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -624,11 +609,10 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                     </div>
                   </div>
                </div>
-            </motion.button>
+            </button>
 
             {/* COUNTDOWN WIDGET */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={updateCountdown}
                className="h-32 col-span-1 rounded-[24px] bg-white/5 border border-white/10 flex flex-col items-center justify-center shadow-xl relative overflow-hidden group"
             >
@@ -636,30 +620,28 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                   <Clock size={100} />
                </div>
                <CountdownWidget target={countdown} />
-            </motion.button>
+            </button>
 
             {/* QUICK GAMES PORTAL */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={sendGameInvite}
                className="h-16 col-span-1 rounded-[20px] bg-purple-600/20 border border-purple-500/30 flex items-center justify-center space-x-2 shadow-xl hover:bg-purple-600/30 transition-colors"
             >
                <Gamepad2 size={16} className="text-purple-400" />
                <span className="text-[10px] font-black text-purple-100 uppercase tracking-widest">Instant Game</span>
-            </motion.button>
+            </button>
 
             {/* LOVE TAP */}
-            <motion.button 
-               whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
+            <button
                onClick={() => {
                   getSocket()?.emit('message:send', { to: partner?.userId, encrypted: 'tug', iv: 'tug', senderId: 'me' });
                   if (navigator.vibrate) navigator.vibrate([10, 30, 10]);
                }}
                className={`h-16 col-span-1 rounded-[20px] border flex items-center justify-center space-x-2 shadow-xl transition-all duration-500 ${isTugging ? 'bg-primary border-primary flex-row-reverse space-x-reverse' : 'bg-white/5 border-white/10'}`}
             >
-               <Heart size={16} className={isTugging ? 'text-white animate-ping' : 'text-primary opacity-60'} />
+               <Heart size={16} className={isTugging ? 'text-white' : 'text-primary opacity-60'} />
                <span className={`text-[10px] uppercase font-black tracking-widest ${isTugging ? 'text-white' : 'text-white/60'}`}>Love Tap</span>
-            </motion.button>
+            </button>
          </div>
 
          {/* LEADERBOARD WIDGET */}
