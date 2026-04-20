@@ -140,6 +140,42 @@ const AppContent = () => {
     ringtoneSound.current = new Audio('https://assets.mixkit.co/active_storage/sfx/1359/1359-preview.mp3');
     ringtoneSound.current.loop = true;
     ringtoneSound.current.volume = 0.6;
+
+    // --- ACTIVE BACKGROUND MODE ---
+    let silentAudio: HTMLAudioElement | null = null;
+    const startBackgroundMode = async () => {
+      try {
+        // 1. Silent Loop to keep process alive on mobile
+        if (!silentAudio) {
+          silentAudio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
+          silentAudio.loop = true;
+        }
+        await silentAudio.play().catch(() => {});
+
+        // 2. Wake Lock
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen').catch(() => null);
+        }
+      } catch (e) { console.warn('Wake Lock / Background failed', e); }
+    };
+
+    const handleActive = () => { startBackgroundMode(); };
+    window.addEventListener('touchstart', handleActive, { once: true });
+    window.addEventListener('click', handleActive, { once: true });
+
+    // 3. Heartbeat (High Rate)
+    const hb = setInterval(() => {
+       const s = getSocket();
+       if (s?.connected) s.emit('heartbeat', { ts: Date.now() });
+    }, 15000); 
+
+    return () => {
+       window.removeEventListener('touchstart', handleActive);
+       window.removeEventListener('click', handleActive);
+       clearInterval(hb);
+       if (silentAudio) { silentAudio.pause(); silentAudio = null; }
+       if (wakeLockRef.current) wakeLockRef.current.release();
+    };
   }, []);
 
   const loadAppData = useCallback(async () => {

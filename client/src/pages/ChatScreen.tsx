@@ -1164,7 +1164,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
             </div>
             
             <div className="flex-1 bg-black relative">
-               <LeafletMap lat={fullScreenMap.lat} lng={fullScreenMap.lng} />
+               <LeafletMap key={`${fullScreenMap.lat}-${fullScreenMap.lng}`} lat={fullScreenMap.lat} lng={fullScreenMap.lng} />
             </div>
 
             <div className="p-6 bg-[#0a0a0c] border-t border-white/5 flex flex-col space-y-4">
@@ -1486,10 +1486,11 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
   const mapInstance = useRef<any>(null);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const timer = setInterval(() => {
       if (mapRef.current && !mapInstance.current) {
         const L = (window as any).L;
         if (!L) return;
+        clearInterval(timer);
 
         try {
           const map = L.map(mapRef.current, {
@@ -1573,7 +1574,7 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
     }, 150);
 
     return () => {
-      clearTimeout(timer);
+      clearInterval(timer);
       if (mapInstance.current) {
         mapInstance.current.remove();
         mapInstance.current = null;
