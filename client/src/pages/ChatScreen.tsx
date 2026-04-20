@@ -1495,6 +1495,8 @@ const LeafletMap = ({ lat, lng, livePos }: { lat: number; lng: number, livePos?:
       markerRef.current.setLatLng([livePos.lat, livePos.lng]);
     }
   }, [livePos]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       if (mapRef.current && !mapInstance.current) {
         const L = (window as any).L;
