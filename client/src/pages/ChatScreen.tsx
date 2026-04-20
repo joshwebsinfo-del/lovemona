@@ -1497,12 +1497,11 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
             attributionControl: false,
             fadeAnimation: true,
             zoomAnimation: true
-          }).setView([lat, lng], 18);
+          }).setView([lat, lng], 16);
 
-          // Use Google Hybrid Tiles (lyrs=y) for the "Classic" look with Label overlays
+          // Premium Hybrid Tiles
           L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-            maxZoom: 20,
-            edgeBufferTiles: 1
+            maxZoom: 20
           }).addTo(map);
 
           L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -1510,8 +1509,8 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
           const icon = L.divIcon({
             className: 'custom-map-marker',
             html: `
-              <div class="relative flex items-center justify-center">
-                <div class="absolute w-12 h-12 bg-primary/30 rounded-full opacity-50"></div>
+              <div class="relative flex items-center justify-center animate-pulse">
+                <div class="absolute w-12 h-12 bg-primary/30 rounded-full"></div>
                 <div class="relative w-5 h-5 bg-primary border-2 border-white rounded-full shadow-2xl"></div>
               </div>
             `,
@@ -1521,7 +1520,52 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
 
           L.marker([lat, lng], { icon }).addTo(map);
           mapInstance.current = map;
-          setTimeout(() => map.invalidateSize(), 150);
+
+          // --- LIVE ROADMAP LOGIC ---
+          if (navigator.geolocation) {
+             navigator.geolocation.getCurrentPosition(async (pos) => {
+                const uLat = pos.coords.latitude;
+                const uLng = pos.coords.longitude;
+                
+                // Add User Marker
+                const userIcon = L.divIcon({
+                  className: 'user-map-marker',
+                  html: `<div class="w-4 h-4 bg-blue-500 border-2 border-white rounded-full shadow-lg"></div>`,
+                  iconSize: [16, 16],
+                  iconAnchor: [8, 8]
+                });
+                L.marker([uLat, uLng], { icon: userIcon }).addTo(map);
+
+                try {
+                  const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${uLng},${uLat};${lng},${lat}?overview=full&geometries=geojson`);
+                  const data = await res.json();
+                  if (data.routes && data.routes[0]) {
+                    const coords = data.routes[0].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+                    const route = L.polyline(coords, {
+                      color: '#ef4444',
+                      weight: 5,
+                      opacity: 0.8,
+                      lineJoin: 'round',
+                      dashArray: '1, 10'
+                    }).addTo(map);
+                    
+                    // Fit map to show both
+                    map.fitBounds(route.getBounds(), { padding: [50, 50] });
+                    
+                    // Animate the route line
+                    let offset = 0;
+                    const animate = () => {
+                       offset = (offset + 1) % 20;
+                       route.setStyle({ dashOffset: `${-offset}` });
+                       requestAnimationFrame(animate);
+                    };
+                    animate();
+                  }
+                } catch (err) { console.error('Routing failed', err); }
+             });
+          }
+
+          setTimeout(() => map.invalidateSize(), 200);
         } catch (e) {
           console.error('Map Load Error:', e);
         }
@@ -1537,7 +1581,23 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
     };
   }, [lat, lng]);
 
-  return <div ref={mapRef} className="w-full h-full bg-black border-none outline-none overflow-hidden" />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={mapRef} className="w-full h-full bg-black border-none outline-none overflow-hidden" />
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center">
+         <div className="bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl shadow-2xl flex items-center space-x-3 pointer-events-auto">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
+            <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">Partner Live Roadmap</span>
+         </div>
+         <button 
+           onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank')}
+           className="mt-4 bg-primary px-6 py-2.5 rounded-full text-white text-xs font-black uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.4)] active:scale-95 transition-transform"
+         >
+           Get Directions
+         </button>
+      </div>
+    </div>
+  );
 };
 
 
