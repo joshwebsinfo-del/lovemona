@@ -31,7 +31,6 @@ export const GlobalBackground: React.FC = () => {
 
        if (settings) {
           if (settings.theme) applyThemeById(settings.theme, settings.imageUrl);
-          if (settings.liteMode !== undefined) setIsLiteMode(settings.liteMode);
        }
 
 
@@ -61,12 +60,10 @@ export const GlobalBackground: React.FC = () => {
        const { mood, imageUrl } = e.detail;
        applyThemeById(mood, imageUrl);
     };
-     const handleLiteToggle = (e: any) => setIsLiteMode(e.detail.enabled);
      window.addEventListener('theme-updated', handleThemeChange as any);
-     window.addEventListener('lite-mode-toggle', handleLiteToggle as any);
      return () => {
         window.removeEventListener('theme-updated', handleThemeChange as any);
-        window.removeEventListener('lite-mode-toggle', handleLiteToggle as any);
+
      };
   }, []);
 
