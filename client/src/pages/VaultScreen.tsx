@@ -108,15 +108,23 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
     setIsUploading(true);
     setUploadStatus('Reading file...');
 
-    try {
-      let b64: string;
-      if (file.type.startsWith('image/')) {
-        b64 = await compressImage(file);
-      } else {
-        b64 = await readFileAsBase64(file);
-      }
+      try {
+        let b64: string;
+        if (file.type.startsWith('image/')) {
+          b64 = await compressImage(file);
+        } else {
+          b64 = await readFileAsBase64(file);
+        }
 
-      const id = Date.now().toString();
+        const db = await initDB();
+        const existing = await db.getAll('vault');
+        if (existing?.find((i: any) => i.data === b64)) {
+           setUploadStatus('Already in Vault ✓');
+           setIsUploading(false);
+           return;
+        }
+
+        const id = Date.now().toString();
       const type = file.type.startsWith('video') ? 'video' : 'photo';
 
       const db = await initDB();

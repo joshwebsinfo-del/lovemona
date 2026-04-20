@@ -188,8 +188,6 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   // Soundscape States
   const [showEmoji, setShowEmoji] = useState(false);
 
-  // Soundscape States
-  const [audioLevel, setAudioLevel] = useState(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationIdRef = useRef<number | null>(null);
@@ -197,7 +195,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   const audioSourceMap = useRef<Map<HTMLAudioElement, MediaElementAudioSourceNode>>(new Map());
 
   const startAudioAnalysis = (audioElement: HTMLAudioElement) => {
-    if (isLiteMode) return; // Skip heavy analysis in Lite Mode
+    if (isLiteMode) return; 
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       const ctx = audioCtxRef.current;
@@ -211,21 +209,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
       
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 64; 
-      source.disconnect(); // Disconnect existing paths
+      source.disconnect(); 
       source.connect(analyser);
       analyser.connect(ctx.destination);
       analyserRef.current = analyser;
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-      const update = () => {
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-        const avg = sum / dataArray.length;
-        setAudioLevel(avg / 255); 
-        animationIdRef.current = requestAnimationFrame(update);
-      };
-      update();
+      
+      // Removed per-frame setAudioLevel re-renders for maximum performance
     } catch (e) { console.error('Audio analysis failed', e); }
   };
 
@@ -1055,7 +1044,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
 
   return (
     <div className="flex flex-col h-full bg-[#0a0a0c] relative overflow-hidden w-full">
-      <LiveWallpaper type={wallpaper} audioLevel={audioLevel} />
+      <LiveWallpaper type={wallpaper} />
       <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-[#0a0a0c] z-0 pointer-events-none" />
 
       {isVideoRecording && (
@@ -1095,7 +1084,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
           )}
        </AnimatePresence>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-4 space-y-5 pt-6 pb-[180px] no-scrollbar scroll-container" style={{ contain: 'content' }}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto mt-[80px] px-2 sm:px-4 space-y-4 pt-4 pb-[180px] no-scrollbar scroll-container" style={{ contain: 'content', willChange: 'transform', WebkitOverflowScrolling: 'touch' }}>
              {messages.map((m, idx) => (
                <MessageBubble 
                  key={m.id} msg={m} isMe={m.senderId === myUserId} isNew={idx === messages.length - 1} 
