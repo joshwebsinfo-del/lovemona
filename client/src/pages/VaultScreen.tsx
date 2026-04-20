@@ -127,7 +127,6 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
         const id = Date.now().toString();
       const type = file.type.startsWith('video') ? 'video' : 'photo';
 
-      const db = await initDB();
       await db.put('vault', { id, name: file.name, type, data: b64, timestamp: Date.now(), locked: true });
       setUploadStatus('Saved ✓');
       await loadVault();
