@@ -19,6 +19,7 @@ interface SetupScreenProps {
 
 export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const { showNotification } = useNotifications();
+  const [pushStatus, setPushStatus] = useState<'prompt' | 'loading' | 'active' | 'denied' | 'unsupported'>('prompt');
   const [mode, setMode] = useState<'decision' | 'show' | 'scan' | 'manual'>('decision');
   const [myId, setMyId] = useState<string>('');
   const [publicKey, setPublicKey] = useState<string>('');
@@ -157,8 +158,73 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
       setDeferredPrompt(e);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    
+    // Check initial push status
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+       setPushStatus('unsupported');
+    } else if (Notification.permission === 'granted') {
+       // Check if already subscribed in DB (optional, but let's just show prompt for now)
+    }
+
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
   }, []);
+
+  const subscribeToPush = async () => {
+    try {
+      setPushStatus('loading');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushStatus('denied');
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      
+      // VAPID Public Key from .env
+      const vapidPublicKey = 'BGFQdFBv_xpe6nSmdZ7eEGtCIW8hJT_JudRtHfXca8QQPMgOn58gQbsc5-FNe4ibOmPk4H8PMgfbMuGduEN3eaI';
+      const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey
+      });
+
+      const db = await initDB();
+      const identity = await db.get('identity', 'me');
+      if (!identity) throw new Error('No identity');
+
+      const response = await fetch(`${window.location.origin}/api/push/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: identity.userId,
+          subscription: subscription
+        })
+      });
+
+      if (response.ok) {
+        setPushStatus('active');
+        showNotification({ title: 'Notifications Active', message: 'You will now receive messages even when closed.', type: 'system' });
+      } else {
+        throw new Error('Server subscription failed');
+      }
+    } catch (err) {
+      console.error('Push error:', err);
+      setPushStatus('prompt');
+      alert('Failed to enable remote notifications.');
+    }
+  };
+
+  const urlBase64ToUint8Array = (base64String: string) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  };
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
@@ -387,14 +453,14 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
               </div>
 
               {/* FEATURE CAROUSEL */}
-              <div className="pt-8 w-full">
+              <div className="pt-8 w-full space-y-8">
                 <button 
                   onClick={handleInstallApp}
-                  className="w-full h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-[24px] border border-primary/20 flex items-center justify-between px-6 group active:scale-95 transition-all mb-4"
+                  className="w-full h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-[24px] border border-primary/20 flex items-center justify-between px-6 group active:scale-95 transition-all"
                 >
                   <div className="flex items-center space-x-4">
                     <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary">
-                      <Zap size={20} />
+                      <Share2 size={20} />
                     </div>
                     <div className="text-left">
                       <div className="text-[10px] font-black uppercase tracking-wider text-primary">Permanent Access</div>
@@ -403,6 +469,40 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                   </div>
                   <ChevronRight size={20} className="text-white/20 group-hover:text-primary transition-colors" />
                 </button>
+
+                <div className="space-y-4">
+                  <h3 className="text-white/60 text-[10px] font-black uppercase tracking-[0.2em] ml-4 text-left">Advanced Connectivity</h3>
+                  
+                  {/* Remote Notifications Card */}
+                  <div className="bg-white/5 border border-white/10 rounded-[24px] p-5 space-y-5 text-left">
+                     <div className="flex items-start space-x-4">
+                       <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400">
+                          <Zap size={20} />
+                       </div>
+                       <div className="flex-1">
+                          <p className="text-white text-sm font-bold">Always-Active Mode</p>
+                          <p className="text-white/40 text-[10px] leading-relaxed mt-1 italic">Stay connected even when the app is completely closed. Receive instant pings and location alerts.</p>
+                       </div>
+                     </div>
+                     
+                     {pushStatus === 'active' ? (
+                        <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-3 flex items-center space-x-2">
+                           <ShieldCheck size={14} className="text-green-500" />
+                           <span className="text-green-500 text-[10px] font-bold uppercase tracking-wider">Background Sync Active</span>
+                        </div>
+                     ) : pushStatus === 'unsupported' ? (
+                        <p className="text-red-400/60 text-[10px] text-center italic">Background push not supported on this browser.</p>
+                     ) : (
+                       <button 
+                         onClick={subscribeToPush}
+                         disabled={pushStatus === 'loading'}
+                         className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl text-white text-[11px] font-black uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50"
+                       >
+                         {pushStatus === 'loading' ? 'Activating...' : 'Enable Always-Active'}
+                       </button>
+                     )}
+                  </div>
+                </div>
 
                 <div className="flex space-x-4 overflow-x-auto no-scrollbar pb-2">
                   {[
@@ -414,7 +514,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                        <div className="text-primary mb-2">{feat.icon}</div>
                        <div className="text-[10px] font-black text-white uppercase tracking-wider">{feat.title}</div>
                        <div className="text-[8px] text-white/30 font-bold uppercase">{feat.desc}</div>
-                    </div>
+                     </div>
                   ))}
                 </div>
               </div>
