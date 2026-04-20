@@ -165,6 +165,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  const [partnerLiveLocation, setPartnerLiveLocation] = useState<{lat: number, lng: number} | null>(null);
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -184,6 +185,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const activeVoiceEffectRef = useRef<string | null>(null);
+  const watchIdRef = useRef<number | null>(null);
 
   // Soundscape States
   const [showEmoji, setShowEmoji] = useState(false);
@@ -442,6 +444,14 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
            return;
         }
 
+           return;
+        }
+
+        if (payload.type === 'location:live' && payload.lat && payload.lng) {
+           setPartnerLiveLocation({ lat: payload.lat!, lng: payload.lng! });
+           return;
+        }
+        
         if (payload.type === 'text' || payload.type === 'media' || payload.type === 'location') {
           setIsPartnerTyping(false); // Cancel typing when message arrives
           const db = await initDB();
@@ -676,45 +686,45 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
     }
   }, [sharedKey, socketConnected]);
 
-  // ── SEND LOCATION (one-tap) ──
+  // ──   // ── SEND LOCATION (Live Watch) ──
   const sendLocation = () => {
-    if (!navigator.geolocation) return alert('Location not supported by your browser');
-    setIsProcessingMedia(true);
+    if (!navigator.geolocation) return alert('Location not supported');
+    if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+        showNotification({ title: 'Location Stopped', message: 'Live tracking disabled.', type: 'system' });
+        return;
+    }
 
-    navigator.geolocation.getCurrentPosition(
+    setIsProcessingMedia(true);
+    let first = true;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
         const { latitude: lat, longitude: lng } = pos.coords;
-        console.log('📍 Location Acquired:', lat, lng);
-        
-        const payload: ChatPayload = { 
-          type: 'location', 
-          lat, 
-          lng, 
-          text: `📍 My Live Location`
-        };
-        
-        const msgId = Date.now().toString();
-        const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
-        
-        setMessages(prev => [...prev, msg]);
-        scrollToBottom();
-        
-        const db = await initDB();
-        await db.put('messages', msg);
-        await sendSecurePayload(payload, msgId);
-        
-        setIsProcessingMedia(false);
+        if (first) {
+           first = false;
+           const payload: ChatPayload = { type: 'location', lat, lng, text: `📍 Live Tracking Active` };
+           const msgId = Date.now().toString();
+           const msg: Message = { id: msgId, senderId: myUserId, text: JSON.stringify(payload), timestamp: Date.now(), status: 'sent' };
+           setMessages(prev => [...prev, msg]);
+           const db = await initDB();
+           await db.put('messages', msg);
+           await sendSecurePayload(payload, msgId);
+           setIsProcessingMedia(false);
+           showNotification({ title: 'Live Tracking', message: 'Your movement is now visible to partner.', type: 'system' });
+        } else {
+           // Periodic live update (Socket only, non-persistent)
+           sendSecurePayload({ type: 'location:live' as any, lat, lng });
+        }
       },
       (err) => {
         setIsProcessingMedia(false);
-        console.error('❌ Geolocation Error:', err);
-        let errMsg = 'Failed to get location.';
-        if (err.code === 1) errMsg = 'Location access denied. Please allow location permissions in your browser settings.';
-        else if (err.code === 2) errMsg = 'Location signals are weak. Try moving near a window or outdoors.';
-        else if (err.code === 3) errMsg = 'Location request timed out. Try again.';
-        alert(errMsg);
+        console.error('❌ Tracking Error:', err);
       },
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  };ut: 20000, maximumAge: 0 }
     );
   };
 
@@ -1164,7 +1174,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
             </div>
             
             <div className="flex-1 bg-black relative">
-               <LeafletMap key={`${fullScreenMap.lat}-${fullScreenMap.lng}`} lat={fullScreenMap.lat} lng={fullScreenMap.lng} />
+               <LeafletMap key={`${fullScreenMap.lat}-${fullScreenMap.lng}`} lat={fullScreenMap.lat} lng={fullScreenMap.lng} livePos={partnerLiveLocation} />
             </div>
 
             <div className="p-6 bg-[#0a0a0c] border-t border-white/5 flex flex-col space-y-4">
@@ -1481,11 +1491,16 @@ const ChatInput = React.memo(({
   </div>
 ));
 
-const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
+const LeafletMap = ({ lat, lng, livePos }: { lat: number; lng: number, livePos?: {lat: number, lng: number} | null }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
+  const markerRef = useRef<any>(null);
 
   useEffect(() => {
+    if (markerRef.current && livePos) {
+      markerRef.current.setLatLng([livePos.lat, livePos.lng]);
+    }
+  }, [livePos]);
     const timer = setInterval(() => {
       if (mapRef.current && !mapInstance.current) {
         const L = (window as any).L;
@@ -1519,7 +1534,7 @@ const LeafletMap = ({ lat, lng }: { lat: number; lng: number }) => {
             iconAnchor: [24, 24]
           });
 
-          L.marker([lat, lng], { icon }).addTo(map);
+          markerRef.current = L.marker([lat, lng], { icon }).addTo(map);
           mapInstance.current = map;
 
           // --- LIVE ROADMAP LOGIC ---
