@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { initSocket, getSocket } from '../lib/socket';
 import { encryptMessage, decryptMessage, deriveSharedSecret, importPublicKey, encryptBuffer, decryptBuffer, bufferToBase64, base64ToBuffer } from '../lib/crypto';
 import { ConnectionHealth } from '../components/ConnectionHealth';
+import { useNotifications } from '../components/NotificationProvider';
 
 import { LiveWallpaper } from '../components/LiveWallpaper';
 const EmojiPicker = React.lazy(() => import('emoji-picker-react'));
@@ -19,7 +20,7 @@ interface ChatScreenProps {
 interface SupabaseMessage { id: string; sender_id: string; recipient_id: string; encrypted_payload: string; iv: string; timestamp: number }
 
 interface ChatPayload {
-  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync' | 'location:request' | 'delete';
+  type: 'text' | 'media' | 'location' | 'typing' | 'call:offer' | 'call:answer' | 'call:ice' | 'call:end' | 'reaction' | 'identity:sync' | 'location:request' | 'delete' | 'location:live';
   text?: string;
   mediaType?: string;
   mediaData?: string;
@@ -141,6 +142,7 @@ const MediaWrapper = ({ pl, sharedKey, setViewMedia, startAudioAnalysis, stopAud
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteMode }) => {
   const navigate = useNavigate();
+  const { showNotification } = useNotifications();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
