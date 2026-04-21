@@ -168,6 +168,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
   const [partnerLiveLocation, setPartnerLiveLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [partnerLastSeen, setPartnerLastSeen] = useState<number | null>(null);
+  const [statusText, setStatusText] = useState('Offline');
 
   // Refs
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -315,12 +317,16 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
                     } catch { /* ignored */ }
                  }
               }
-              if (newLocalsAdded) {
-                 currentMessages.sort((a, b) => a.timestamp - b.timestamp);
-                 setMessages([...currentMessages]);
-                 scrollToBottom();
-              }
-           }
+               if (newLocalsAdded) {
+                  currentMessages.sort((a, b) => a.timestamp - b.timestamp);
+                  setMessages([...currentMessages]);
+               }
+               // Use instant scroll for initial load
+               setTimeout(() => scrollToBottom(true), 50);
+            } else {
+               // Even if no cloud messages, scroll historical locals
+               setTimeout(() => scrollToBottom(true), 50);
+            }
            
            // Live Sync
            supabase.channel('public:messages')
@@ -368,9 +374,20 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
     return () => window.removeEventListener('pair:updated', setup);
   }, [partnerNickname]);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((instant = false) => {
     requestAnimationFrame(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      if (scrollRef.current) {
+        if (instant) {
+           const originalBehavior = window.getComputedStyle(scrollRef.current).scrollBehavior;
+           scrollRef.current.style.scrollBehavior = 'auto';
+           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+           setTimeout(() => {
+              if (scrollRef.current) scrollRef.current.style.scrollBehavior = originalBehavior;
+           }, 50);
+        } else {
+           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }
     });
   }, []);
 
@@ -388,7 +405,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
        if (pid) s.emit('status:subscribe', { partnerId: pid });
     };
 
-    const handleStatus = (data: { isOnline: boolean }) => setPartnerOnline(data.isOnline);
+    const handleStatus = (data: { isOnline: boolean; lastSeen?: number | null }) => {
+       setPartnerOnline(data.isOnline);
+       if (data.lastSeen !== undefined) setPartnerLastSeen(data.lastSeen);
+    };
     s.on('status:update', handleStatus);
     s.on('connect', doSubscribe);
     s.on('disconnect', () => setSocketConnected(false));
@@ -683,6 +703,32 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
        });
     }
   }, [sharedKey, socketConnected]);
+
+  // Update status text periodically
+  useEffect(() => {
+    const updateStatus = () => {
+      if (partnerOnline) {
+        setStatusText('Online now');
+        return;
+      }
+      if (!partnerLastSeen) {
+        setStatusText('Offline');
+        return;
+      }
+      const diff = Date.now() - partnerLastSeen;
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) setStatusText('last seen just now');
+      else if (mins < 60) setStatusText(`last seen ${mins} min ago`);
+      else {
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) setStatusText(`last seen ${hours}h ago`);
+        else setStatusText(`last seen ${Math.floor(hours / 24)}d ago`);
+      }
+    };
+    updateStatus();
+    const timer = setInterval(updateStatus, 30000); // Update every 30s for accuracy
+    return () => clearInterval(timer);
+  }, [partnerOnline, partnerLastSeen]);
 
   // ──   // ── SEND LOCATION (Live Watch) ──
   const sendLocation = () => {
@@ -1077,12 +1123,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
              />
           ) : (
              <ChatHeader 
-               partnerInfo={partnerInfo} partnerOnline={partnerOnline} isBlurred={isBlurred} 
-               setIsBlurred={setIsBlurred} startCall={startCall} showMenu={showMenu} 
-               setShowMenu={setShowMenu} clearChat={clearChat} 
-               sendSecurePayload={sendSecurePayload} wallpaper={wallpaper} 
-               setWallpaper={setWallpaper} navigate={navigate} 
-               socketConnected={socketConnected} sharedKey={sharedKey}
+               partnerInfo={partnerInfo} partnerOnline={partnerOnline} statusText={statusText}
+               isBlurred={isBlurred} setIsBlurred={setIsBlurred}
+               startCall={startCall} showMenu={showMenu} setShowMenu={setShowMenu}
+               clearChat={clearChat} sendSecurePayload={sendSecurePayload} 
+               wallpaper={wallpaper} setWallpaper={setWallpaper}
+               navigate={navigate} socketConnected={socketConnected} sharedKey={sharedKey}
                repairConnection={repairConnection}
                isLiteMode={isLiteMode}
              />
@@ -1342,14 +1388,13 @@ const SelectionHeader = React.memo(({ selectedCount, onCancel, onDelete }: any) 
   </div>
 ));
 
-const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection }: any) => (
+const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlurred, startCall, showMenu, setShowMenu, clearChat, sendSecurePayload, wallpaper, setWallpaper, navigate, socketConnected, sharedKey, repairConnection, statusText }: any) => (
   <div className={`fixed top-0 w-full z-30 bg-[#0a0a0c]/98 border-b border-white/5 shadow-2xl px-2 sm:px-4 py-3 flex items-center justify-between`}>
     <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0 pr-2">
       <button onClick={() => navigate('/')} className="p-2 -ml-1 sm:-ml-2 text-white/40 hover:text-white transition-colors active:scale-90 shrink-0">
          <ChevronLeft size={24} />
       </button>
       <div className="relative shrink-0">
-        {partnerOnline && <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0a0a0c] z-10" />}
         <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden border border-white/10">
           <img src={partnerInfo.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partnerInfo.userId || 'partner'}`} alt={partnerInfo.nick} className="w-full h-full object-cover" loading="lazy" />
         </div>
@@ -1357,7 +1402,11 @@ const ChatHeader = React.memo(({ partnerInfo, partnerOnline, isBlurred, setIsBlu
       </div>
       <div className="flex-1 min-w-0">
         <h2 className="text-white font-bold truncate text-sm sm:text-base">{partnerInfo.nick || 'Partner'}</h2>
-        <div className="flex items-center space-x-2 mt-0.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2">
+          <p className={`text-[10px] font-black uppercase tracking-widest ${partnerOnline ? 'text-green-500' : 'text-white/30'}`}>
+            {statusText}
+          </p>
+          <div className="hidden sm:block w-1 h-1 bg-white/10 rounded-full" />
           <ConnectionHealth 
             isSocketConnected={socketConnected}
             isPartnerOnline={partnerOnline}

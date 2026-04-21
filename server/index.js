@@ -97,6 +97,8 @@ io.on('connection', (socket) => {
     if (!users.has(userId)) {
       users.set(userId, new Set());
       console.log(`[presence] ${userId} FIRST connection. Broadcasting Online.`);
+      // Update Supabase with "null" last_seen (meaning online)
+      supabase.from('users').update({ last_seen: null }).eq('user_id', userId).then();
       io.to(`tracking:${userId}`).emit('status:update', { isOnline: true });
     }
     
@@ -147,10 +149,17 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('status:subscribe', ({ partnerId }) => {
+  socket.on('status:subscribe', async ({ partnerId }) => {
     socket.join(`tracking:${partnerId}`);
     const isOnline = users.has(partnerId);
-    socket.emit('status:update', { isOnline });
+    let lastSeen = null;
+    
+    if (!isOnline) {
+      const { data } = await supabase.from('users').select('last_seen').eq('user_id', partnerId).single();
+      if (data) lastSeen = data.last_seen;
+    }
+    
+    socket.emit('status:update', { isOnline, lastSeen });
   });
 
   socket.on('disconnect', () => {
@@ -162,8 +171,11 @@ io.on('connection', (socket) => {
       
       if (socketSet.size === 0) {
         users.delete(userId);
+        const now = Date.now();
         console.log(`[presence] ${userId} LAST connection closed. Broadcasting Offline.`);
-        io.to(`tracking:${userId}`).emit('status:update', { isOnline: false });
+        // Persist last_seen
+        supabase.from('users').update({ last_seen: now }).eq('user_id', userId).then();
+        io.to(`tracking:${userId}`).emit('status:update', { isOnline: false, lastSeen: now });
       }
     }
   });

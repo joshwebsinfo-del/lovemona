@@ -57,6 +57,8 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [scores, setScores] = useState<any[]>([]);
   const [showPushBanner, setShowPushBanner] = useState(false);
+  const [partnerLastSeen, setPartnerLastSeen] = useState<number | null>(null);
+  const [statusText, setStatusText] = useState('Offline');
   
   const { subscribeToPush, isPushSupported } = useNotifications();
   
@@ -100,7 +102,10 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
       } catch { /* ignored */ }
     };
 
-    const handleStatus = (data: { isOnline: boolean }) => setIsOnline(data.isOnline);
+    const handleStatus = (data: { isOnline: boolean; lastSeen?: number | null }) => {
+       setIsOnline(data.isOnline);
+       if (data.lastSeen !== undefined) setPartnerLastSeen(data.lastSeen);
+    };
     const doSubscribe = () => {
       setSocketConnected(true);
       s.emit('status:subscribe', { partnerId: pid });
@@ -287,6 +292,32 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
        window.removeEventListener('pair:updated', load);
     };
   }, []);
+
+  // Update status text periodically
+  useEffect(() => {
+    const updateStatus = () => {
+      if (isOnline) {
+        setStatusText('Active now');
+        return;
+      }
+      if (!partnerLastSeen) {
+        setStatusText('Offline');
+        return;
+      }
+      const diff = Date.now() - partnerLastSeen;
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) setStatusText('last seen just now');
+      else if (mins < 60) setStatusText(`last seen ${mins} min ago`);
+      else {
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) setStatusText(`last seen ${hours}h ago`);
+        else setStatusText(`last seen ${Math.floor(hours / 24)}d ago`);
+      }
+    };
+    updateStatus();
+    const timer = setInterval(updateStatus, 30000);
+    return () => clearInterval(timer);
+  }, [isOnline, partnerLastSeen]);
 
   // Mood Gradient logic moved to GlobalBackground
 
@@ -486,8 +517,8 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                className="flex items-center justify-center space-x-2"
              >
                 <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-white/20'}`} />
-                <p className="text-white/40 text-[11px] font-black uppercase tracking-[3px]">
-                   {isTyping ? 'Whispering secrets...' : (isOnline ? 'Active' : 'Offline')}
+                <p className={`text-white/40 text-[11px] font-black uppercase tracking-[3px] transition-colors ${isOnline ? 'text-green-500' : ''}`}>
+                   {isTyping ? 'Whispering secrets...' : statusText}
                 </p>
              </motion.div>
           </div>
