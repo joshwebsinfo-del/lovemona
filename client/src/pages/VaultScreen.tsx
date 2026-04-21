@@ -48,8 +48,10 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [activeCategory, setActiveCategory] = useState<'photo' | 'video' | null>(null);
-  const [viewItem, setViewItem] = useState<any>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [vaultPin, setVaultPin] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── LOAD VAULT ──
@@ -62,6 +64,8 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
     const keys = await getKeys();
     if (!keys) return;
     setSharedKey(keys.sharedKey);
+    const auth = await keys.db.get('auth', 'pins');
+    if (auth) setVaultPin(auth.realPin);
 
     setIsSyncing(true);
     setSyncProgress(0);
@@ -117,17 +121,11 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
         }
 
         const db = await initDB();
-        const existing = await db.getAll('vault');
-        if (existing?.find((i: any) => i.data === b64)) {
-           setUploadStatus('Already in Vault ✓');
-           setIsUploading(false);
-           return;
-        }
-
         const id = Date.now().toString();
-      const type = file.type.startsWith('video') ? 'video' : 'photo';
+        const type = file.type.startsWith('video') ? 'video' : 'photo';
+        const raw = await file.arrayBuffer();
 
-      await db.put('vault', { id, name: file.name, type, data: b64, timestamp: Date.now(), locked: true });
+        await db.put('vault', { id, name: file.name, type, data: raw, timestamp: Date.now(), locked: true });
       setUploadStatus('Saved ✓');
       await loadVault();
 
@@ -229,7 +227,65 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
 
       {/* CONTENT */}
 
-      <main className="pt-40 pb-36 px-6">
+      {/* PIN LOCK OVERLAY */}
+      <AnimatePresence>
+        {!isVaultUnlocked && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-[#0a0a0c] flex flex-col items-center justify-center p-6"
+          >
+            <div className="w-full max-w-xs text-center">
+              <div className="w-16 h-16 bg-white/5 rounded-2xl mx-auto flex items-center justify-center mb-8 border border-white/10">
+                <FolderOpen size={32} className="text-primary" />
+              </div>
+              <h2 className="text-2xl font-black text-white mb-2">Vault Locked</h2>
+              <p className="text-white/30 text-[10px] uppercase tracking-[4px] font-black mb-10">Enter PIN to Continue</p>
+              
+              <div className="grid grid-cols-3 gap-3">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0].map((num, i) => {
+                  if (num === '') return <div key="v" />;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (pinInput.length < 6) {
+                          const next = pinInput + num;
+                          setPinInput(next);
+                          if (next === vaultPin) {
+                             setTimeout(() => setIsVaultUnlocked(true), 200);
+                          } else if (next.length === 6) {
+                             setTimeout(() => setPinInput(''), 500);
+                             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                          }
+                        }
+                      }}
+                      className="w-full aspect-square rounded-2xl bg-white/5 border border-white/10 text-2xl font-light text-white flex items-center justify-center active:bg-primary/20 transition-all"
+                    >
+                      {num}
+                    </button>
+                  );
+                })}
+                <button 
+                  onClick={() => setPinInput('')}
+                  className="w-full aspect-square rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center active:bg-red-500/20 transition-all"
+                >
+                  <Trash2 size={20} className="text-white/20" />
+                </button>
+              </div>
+
+              <div className="flex justify-center space-x-3 mt-10">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className={`w-3 h-3 rounded-full ${pinInput.length > i ? 'bg-primary' : 'bg-white/10'}`} />
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <main className="pt-40 pb-36 px-6 h-full overflow-y-auto no-scrollbar">
         <AnimatePresence mode="wait">
           {!activeCategory ? (
             <motion.div key="folders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="grid grid-cols-2 gap-5 will-change-transform">
@@ -301,7 +357,11 @@ const VaultLightbox = ({ item, onClose, isLiteMode }: { item: any; onClose: () =
   const [loading, setLoading] = useState(isStorage);
 
   useEffect(() => {
-    if (!isStorage) return;
+    if (!isStorage) {
+      const url = (item.data instanceof ArrayBuffer) ? URL.createObjectURL(new Blob([item.data])) : item.data;
+      setSrc(url);
+      return () => { if (item.data instanceof ArrayBuffer) URL.revokeObjectURL(url); };
+    }
     let url = '';
     (async () => {
       try {
@@ -353,12 +413,20 @@ const VaultLightbox = ({ item, onClose, isLiteMode }: { item: any; onClose: () =
 // --- SUB-COMPONENTS ---
 
 const VaultGridItem = React.memo(({ item, setViewItem, deleteItem, sharedKey }: any) => {
-  const isStorage = item.data.startsWith('storage://');
-  const [previewSrc, setPreviewSrc] = useState(isStorage ? '' : item.data);
-  const [loading, setLoading] = useState(isStorage);
+  const isStorage = typeof item.data === 'string' && item.data.startsWith('storage://');
+  const [previewSrc, setPreviewSrc] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isStorage) return;
+    if (!isStorage) {
+       if (item.data instanceof ArrayBuffer) {
+          setPreviewSrc(URL.createObjectURL(new Blob([item.data])));
+       } else {
+          setPreviewSrc(item.data);
+       }
+       setLoading(false);
+       return;
+    }
     let url = '';
     const loadPreview = async () => {
       try {

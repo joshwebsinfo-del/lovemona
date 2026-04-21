@@ -15,7 +15,7 @@ export interface Message {
 export interface VaultItem {
   id: string;
   type: 'photo' | 'video' | 'voice';
-  data: string; // Base64 data (simplified for speed)
+  data: string | ArrayBuffer; // Support for fast binary storage
   name: string;
   timestamp: number;
   locked: boolean;

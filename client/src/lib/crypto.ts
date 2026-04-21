@@ -59,22 +59,19 @@ export async function deriveSharedSecret(
 }
 
 export function bufferToBase64(buffer: ArrayBuffer): string {
-  let binary = '';
   const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  const chunkSize = 32768;
-  for (let i = 0; i < len; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode.apply(null, chunk as any); // Use chunking to prevent stack overflow
+  let binary = '';
+  // Use a faster way to convert large chunks
+  for (let i = 0; i < bytes.byteLength; i += 1024) {
+    binary += String.fromCharCode(...bytes.slice(i, i + 1024));
   }
   return btoa(binary);
 }
 
 export function base64ToBuffer(base64: string): ArrayBuffer {
   const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
   return bytes.buffer;
