@@ -157,21 +157,12 @@ io.on('connection', (socket) => {
 
   socket.on('status:subscribe', async ({ partnerId }) => {
     socket.join(`tracking:${partnerId}`);
-    let isOnline = users.has(partnerId);
+    const isOnline = users.has(partnerId);
     let lastSeen = null;
     
-    // 2-Hour Grace Period Logic (to keep partner appearing "Online" in background)
-    const GRACE_PERIOD = 2 * 60 * 60 * 1000;
-
     if (!isOnline) {
       const { data } = await supabase.from('users').select('last_seen').eq('user_id', partnerId).single();
-      if (data && data.last_seen) {
-        lastSeen = data.last_seen;
-        const timeSinceLastSeen = Date.now() - Number(lastSeen);
-        if (timeSinceLastSeen < GRACE_PERIOD) {
-          isOnline = true; // Virtually online
-        }
-      }
+      if (data) lastSeen = data.last_seen;
     }
     
     socket.emit('status:update', { isOnline, lastSeen });
@@ -187,36 +178,14 @@ io.on('connection', (socket) => {
       if (socketSet.size === 0) {
         users.delete(userId);
         const now = Date.now();
-        console.log(`[presence] ${userId} physical connection lost. Maintaining virtual presence.`);
-        // Persist actual last_seen
+        console.log(`[presence] ${userId} LAST connection closed. Broadcasting Offline.`);
+        // Persist last_seen
         supabase.from('users').update({ last_seen: now }).eq('user_id', userId).then();
-        
-        // Broadcast Virtual Online (Grace Period)
-        io.to(`tracking:${userId}`).emit('status:update', { isOnline: true, lastSeen: now });
+        io.to(`tracking:${userId}`).emit('status:update', { isOnline: false, lastSeen: now });
       }
     }
   });
 });
-
-// Presence Cleanup: Sweep every 15 minutes to turn off "Ghosts" who exceeded 2 hours
-setInterval(async () => {
-  const GRACE_PERIOD = 2 * 60 * 60 * 1000;
-  const now = Date.now();
-  try {
-     const { data: ghosts } = await supabase.from('users')
-       .select('user_id, last_seen')
-       .not('last_seen', 'is', null);
-     
-     ghosts?.forEach(g => {
-        if (!users.has(g.user_id)) {
-           const timeSince = now - Number(g.last_seen);
-           if (timeSince >= GRACE_PERIOD) {
-              io.to(`tracking:${g.user_id}`).emit('status:update', { isOnline: false, lastSeen: g.last_seen });
-           }
-        }
-     });
-  } catch {}
-}, 15 * 60 * 1000);
 
 app.post('/api/push/subscribe', async (req, res) => {
   const { userId, subscription } = req.body;
