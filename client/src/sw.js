@@ -34,16 +34,14 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body,
     icon: data.icon || '/securelove-icon.png',
-    badge: '/securelove-icon.png',
-    vibrate: [200, 100, 200, 100, 400],
+    badge: data.badge || '/securelove-icon.png',
+    vibrate: [200, 100, 200],
     data: {
       url: data.data?.url || '/'
     },
     actions: [
-      { action: 'open', title: 'Open MONA' }
-    ],
-    tag: 'mona-notification',
-    renotify: true
+      { action: 'open', title: 'Open World' }
+    ]
   };
 
   event.waitUntil(
