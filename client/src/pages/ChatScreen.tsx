@@ -375,21 +375,30 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ partnerNickname, isLiteM
   }, [partnerNickname]);
 
   const scrollToBottom = useCallback((instant = false) => {
+    // Double-RAF ensures React has committed DOM changes before we measure scrollHeight
     requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        if (instant) {
-           const originalBehavior = window.getComputedStyle(scrollRef.current).scrollBehavior;
-           scrollRef.current.style.scrollBehavior = 'auto';
-           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-           setTimeout(() => {
-              if (scrollRef.current) scrollRef.current.style.scrollBehavior = originalBehavior;
-           }, 50);
-        } else {
-           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          if (instant) {
+            scrollRef.current.style.scrollBehavior = 'auto';
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            requestAnimationFrame(() => {
+              if (scrollRef.current) scrollRef.current.style.scrollBehavior = 'smooth';
+            });
+          } else {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
         }
-      }
+      });
     });
   }, []);
+
+  // Auto-scroll whenever a new message is added to the array
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
+  }, [messages.length, scrollToBottom]);
 
   // Keep partnerIdRef in sync so closures always have the latest value
   useEffect(() => { partnerIdRef.current = partnerInfo.userId; }, [partnerInfo.userId]);
