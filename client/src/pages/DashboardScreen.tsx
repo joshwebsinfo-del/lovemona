@@ -659,7 +659,7 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
                className="h-16 col-span-1 rounded-[20px] bg-purple-600/20 border border-purple-500/30 flex items-center justify-center space-x-2 shadow-xl hover:bg-purple-600/30 transition-colors"
             >
                <Gamepad2 size={16} className="text-purple-400" />
-               <span className="text-[10px] font-black text-purple-100 uppercase tracking-widest">Instant Game</span>
+               <span className="text-[10px] font-black text-purple-100 uppercase tracking-widest">Quick Categories</span>
             </button>
 
             {/* LOVE TAP */}
@@ -683,12 +683,9 @@ export const DashboardScreen = React.memo(({ isLiteMode }: { isLiteMode?: boolea
             </div>
             
             <div className="space-y-4">
-               {['Categories', 'Roulette', 'Stare', 'Jigsaw'].map(g => {
+               {['Categories'].map(g => {
                   const gameTypeMap: Record<string, string> = {
-                     'Categories': 'categories',
-                     'Roulette': 'reaction',
-                     'Stare': 'soul_stare',
-                     'Jigsaw': 'jigsaw'
+                     'Categories': 'categories'
                   };
                   const type = gameTypeMap[g];
                   const myWins = scores.filter(s => s.owner_id === myIdentity?.userId && s.game_type === type).reduce((a,b) => a + b.total_wins, 0);

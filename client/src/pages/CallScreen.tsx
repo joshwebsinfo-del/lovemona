@@ -104,10 +104,27 @@ export function CallScreen({
   // Soul Stare State
   const [stareTimer, setStareTimer] = useState(0);
 
-  // Categories State
   const [catScore, setCatScore] = useState({ me: 0, partner: 0 });
   const [catPrompt, setCatPrompt] = useState({ cat: '', letter: '' });
-  const [catTimer, setCatTimer] = useState(10);
+  const [catTimer, setCatTimer] = useState(15); // Slightly longer for the voice to finish
+
+  // Voice Reader
+  const speakPrompt = (category: string, letter: string) => {
+    if ('speechSynthesis' in window) {
+      // Basic Hubbie text-to-speech logic
+      const message = new SpeechSynthesisUtterance(`Hubbie, ${category} that starts with ${letter}`);
+      message.rate = 0.9;
+      message.pitch = 1.1;
+      window.speechSynthesis.cancel(); // Stop any current speech
+      window.speechSynthesis.speak(message);
+    }
+  };
+
+  useEffect(() => {
+    if (activeGame === GAME_CATEGORIES && catPrompt.cat && isGameReady) {
+       speakPrompt(catPrompt.cat, catPrompt.letter);
+    }
+  }, [catPrompt, activeGame, isGameReady]);
 
   // Jigsaw State
   const [jigImg, setJigImg] = useState<string | null>(null);
@@ -218,7 +235,7 @@ export function CallScreen({
                           setCatPrompt({ cat: c, letter: l });
                           onSendGameEvent({ action: 'cat_buzz', cat: c, letter: l, scored: false });
                       }
-                      return 10;
+                      return 15;
                   }
                   return prev - 1;
               });
@@ -339,18 +356,9 @@ export function CallScreen({
       
       {/* Game Selector Menu */}
       {showGames && connected && callType === 'video' && !activeGame && (
-         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', justifyContent: 'flex-start', paddingBottom: '10px' }}>
-            <button onClick={() => handleStartGame(GAME_REACTION)} className="call-game-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
-               Roulette
-            </button>
-            <button onClick={() => handleStartGame(GAME_STARE)} className="call-game-btn" style={{ background: 'rgba(59, 130, 246, 0.2)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.4)' }}>
-               Stare
-            </button>
-            <button onClick={() => handleStartGame(GAME_CATEGORIES)} className="call-game-btn" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#fde047', border: '1px solid rgba(234, 179, 8, 0.4)' }}>
+         <div style={{ position: 'absolute', top: '100px', width: '100%', padding: '0 20px', zIndex: 100, display: 'flex', gap: '10px', overflowX: 'auto', justifyContent: 'center', paddingBottom: '10px' }}>
+            <button onClick={() => handleStartGame(GAME_CATEGORIES)} className="call-game-btn" style={{ background: 'rgba(234, 179, 8, 0.2)', color: '#fde047', border: '1px solid rgba(234, 179, 8, 0.4)', padding: '12px 30px' }}>
                Categories
-            </button>
-            <button onClick={() => handleStartGame(GAME_JIGSAW)} className="call-game-btn" style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#d8b4fe', border: '1px solid rgba(168, 85, 247, 0.4)' }}>
-               Jigsaw
             </button>
          </div>
       )}
