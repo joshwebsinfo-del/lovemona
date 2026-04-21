@@ -212,8 +212,9 @@ const AppContent = () => {
            initSocket(identity.userId);
 
            // Optimization: Parallel cloud restore
-           supabase.from('users').select('theme, wallpaper, imageUrl').eq('user_id', identity.userId).single()
-             .then(async ({ data: profile }) => {
+           (async () => {
+              try {
+                const { data: profile } = await supabase.from('users').select('theme, wallpaper, imageUrl').eq('user_id', identity.userId).single();
                 if (profile) {
                    const db = await initDB();
                    const currentSettings = await db.get('settings', 'main') || { id: 'main' };
@@ -223,8 +224,10 @@ const AppContent = () => {
                       window.dispatchEvent(new CustomEvent('theme-updated', { detail: { mood: profile.theme, imageUrl: profile.imageUrl } }));
                    }
                 }
-             })
-             .catch(e => console.warn('Cloud restore skipped:', e));
+              } catch (e) {
+                console.warn('Cloud restore skipped:', e);
+              }
+           })();
         }
         window.dispatchEvent(new CustomEvent('pair:updated'));
       } else {

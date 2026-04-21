@@ -48,6 +48,7 @@ export const VaultScreen: React.FC<{ isLiteMode?: boolean }> = ({ isLiteMode }) 
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [activeCategory, setActiveCategory] = useState<'photo' | 'video' | null>(null);
+  const [viewItem, setViewItem] = useState<any>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
   const [isVaultUnlocked, setIsVaultUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
