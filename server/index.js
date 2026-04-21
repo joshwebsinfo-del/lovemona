@@ -142,11 +142,16 @@ io.on('connection', (socket) => {
       if (!messageQueue.has(to)) messageQueue.set(to, []);
       messageQueue.get(to).push(payload);
       
-      // Trigger Web Push
-      sendPushNotification(to, { 
-        title: 'SecureLove', 
-        body: 'New message received in your private world.' 
-      });
+      // Trigger Web Push with metadata intelligence
+      let pushTitle = 'SecureLove';
+      let pushBody = 'New message received in your private world.';
+
+      if (metadata?.type === 'call') {
+        pushTitle = '📞 Incoming Secure Line';
+        pushBody = `Someone is calling you for a ${metadata.callType || 'video'} session. Tap to answer.`;
+      }
+
+      sendPushNotification(to, { title: pushTitle, body: pushBody });
     }
   });
 

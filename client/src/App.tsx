@@ -609,7 +609,7 @@ const AppContent = () => {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           const enc = await encryptMessage(sharedKey!, JSON.stringify({type:'call:offer', callType: type, sdp: pc.localDescription}));
-          getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me' });
+          getSocket()?.emit('message:send', { to: partner?.userId, encrypted: enc.encrypted, iv: enc.iv, senderId: 'me', metadata: { type: 'call', callType: type } });
        } else if (remoteSdp) {
           await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
           const answer = await pc.createAnswer();
