@@ -10,6 +10,7 @@ const path = require('path');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 // Environment Validation & Normalization
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
