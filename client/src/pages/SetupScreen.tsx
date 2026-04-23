@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield, ChevronRight, Download, Smartphone } from 'lucide-react';
+import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield, ChevronRight, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import jsQR from 'jsqr';
 import { initSocket } from '../lib/socket';
