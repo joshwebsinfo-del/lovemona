@@ -11,7 +11,7 @@ export async function ensureFreshDB(): Promise<void> {
     check.onsuccess = () => {
       const db = check.result;
       const version = db.version;
-      const stores = Array.from(db.objectStoreNames);
+      // Check version for migration
       db.close();
 
       // Only wipe if it's a strictly older version. 
