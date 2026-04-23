@@ -133,8 +133,9 @@ io.on('connection', (socket) => {
   });
 
   // ── MESSAGING ─────────────────────────────────────────────────────────────
-  socket.on('message:send', async ({ to, encrypted, iv, senderId, messageId }) => {
-    const payload = { encrypted, iv, senderId, timestamp: Date.now(), messageId };
+  socket.on('message:send', async (data) => {
+    const { to, encrypted, iv, senderId, messageId, metadata } = data;
+    const payload = { encrypted, iv, senderId, timestamp: Date.now(), messageId, metadata };
     
     if (users.has(to)) {
       // Emit to ALL sockets of that user
@@ -144,10 +145,16 @@ io.on('connection', (socket) => {
       if (!messageQueue.has(to)) messageQueue.set(to, []);
       messageQueue.get(to).push(payload);
       
+      // Determine push content based on metadata
+      const pushTitle = (metadata?.type === 'call') ? 'Incoming Secure Call' : 'SecureLove';
+      const pushBody = (metadata?.type === 'call') 
+        ? `Incoming ${metadata.callType || 'voice'} call...` 
+        : 'New message received in your private world.';
+
       // Trigger Web Push
       sendPushNotification(to, { 
-        title: 'SecureLove', 
-        body: 'New message received in your private world.' 
+        title: pushTitle, 
+        body: pushBody
       });
     }
   });
