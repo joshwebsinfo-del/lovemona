@@ -3,10 +3,10 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const webpush = require('web-push');
 const { createClient } = require('@supabase/supabase-js');
-const path = require('path');
 
 const app = express();
 app.use(cors());
