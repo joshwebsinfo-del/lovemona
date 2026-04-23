@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield, ChevronRight } from 'lucide-react';
+import { QrCode, Camera, RefreshCw, ShieldCheck, ArrowLeft, Loader2, AlertCircle, Share2, Zap, Heart, Lock, Shield, ChevronRight, Download, Smartphone } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import jsQR from 'jsqr';
 import { initSocket } from '../lib/socket';
@@ -30,6 +30,8 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
   const [enteredPartnerId, setEnteredPartnerId] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
 
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -172,6 +174,13 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   }
 
   useEffect(() => {
+    // Check if already installed
+    setIsInstalled(window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
+    
+    // Check if iOS
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(ios);
+
     const handleBeforeInstall = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -181,8 +190,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
     // Check initial push status
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
        setPushStatus('unsupported');
-    } else if (Notification.permission === 'granted') {
-       // Check if already subscribed in DB (optional, but let's just show prompt for now)
     }
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
@@ -424,6 +431,43 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                 Connect your heart and your device to your partner's through an end-to-end encrypted line.
               </p>
             </div>
+
+            {/* ── INSTALL SECTION (Permanent) ── */}
+            {!isInstalled && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full bg-white/5 border border-white/10 rounded-[32px] p-6 space-y-4 mb-2"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <Zap className="text-primary" size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-bold text-sm">Install SecureLove</h3>
+                    <p className="text-white/40 text-[11px]">Recommended for high-priority notifications</p>
+                  </div>
+                </div>
+
+                {isIOS ? (
+                  <div className="space-y-3 bg-black/20 rounded-2xl p-4">
+                    <p className="text-[10px] text-white/60 leading-relaxed">
+                      1. Tap the <span className="text-white font-bold inline-flex items-center"><Share2 size={12} className="mx-1" /> Share</span> icon below.
+                      <br />
+                      2. Scroll down and select <span className="text-white font-bold">"Add to Home Screen"</span>.
+                    </p>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={handleInstallApp}
+                    className="w-full bg-white text-black h-12 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-primary hover:text-white transition-all active:scale-95 flex items-center justify-center space-x-2"
+                  >
+                    <Download size={16} />
+                    <span>Install Now</span>
+                  </button>
+                )}
+              </motion.div>
+            )}
 
             {isServerOffline && (
               <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-full flex items-center space-x-2">
