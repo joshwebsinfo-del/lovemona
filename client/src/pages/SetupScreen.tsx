@@ -31,6 +31,25 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const [enteredPartnerId, setEnteredPartnerId] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
+  const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (isConnecting) {
+      connectingTimeoutRef.current = setTimeout(() => {
+        setIsConnecting(false);
+        showNotification({ 
+          title: 'Pairing Timeout', 
+          message: 'Connection took too long. Please ensure your partner has their "Show My QR" screen open.', 
+          type: 'alert' 
+        });
+      }, 15000);
+    } else if (connectingTimeoutRef.current) {
+      clearTimeout(connectingTimeoutRef.current);
+    }
+    return () => { if (connectingTimeoutRef.current) clearTimeout(connectingTimeoutRef.current); };
+  }, [isConnecting]);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -277,24 +296,19 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
         socketRef.current = s;
 
         const registerWithServer = () => {
+          console.log(`[Setup] Registering with server as ${identity.userId}`);
           s.emit('pair:init', { myId: identity.userId, publicKey: identity.publicKeyPem, nick: config.nickname, avatar: config.avatar });
+          setIsServerOffline(false);
         };
 
-        if (s.connected) {
-          registerWithServer();
-          setIsServerOffline(false);
-        } else {
-          s.once('connect', () => {
-            registerWithServer();
-            setIsServerOffline(false);
-          });
-          // Timeout to show "Offline" status
-          setTimeout(() => {
-            if (!s.connected) setIsServerOffline(true);
-          }, 3000);
-        }
+        s.on('connect', registerWithServer);
+        if (s.connected) registerWithServer();
+
+        // Timeout to show "Offline" status
+        setTimeout(() => {
+          if (!s.connected) setIsServerOffline(true);
+        }, 3000);
         
-        s.on('connect', () => setIsServerOffline(false));
         s.on('disconnect', () => setIsServerOffline(true));
 
         s.off('pair:received').on('pair:received', async (data: { partnerId: string; publicKey: string; nick: string; avatar: string }) => {
@@ -643,6 +657,12 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50">
                   <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
                   <p className="text-white font-bold">Verifying Partner Identity...</p>
+                  <button 
+                    onClick={() => setIsConnecting(false)}
+                    className="mt-8 text-white/40 text-xs font-bold uppercase tracking-widest hover:text-white transition-colors"
+                  >
+                    Cancel Pairing
+                  </button>
                </div>
              )}
           </motion.div>
