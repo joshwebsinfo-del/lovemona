@@ -31,7 +31,6 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const [enteredPartnerId, setEnteredPartnerId] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
-  const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
   const connectingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
