@@ -26,6 +26,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isServerOffline, setIsServerOffline] = useState(false);
   const [scanStatus, setScanStatus] = useState<'scanning' | 'found'>('scanning');
   const [enteredPartnerId, setEnteredPartnerId] = useState('');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -281,9 +282,20 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
 
         if (s.connected) {
           registerWithServer();
+          setIsServerOffline(false);
         } else {
-          s.once('connect', registerWithServer);
+          s.once('connect', () => {
+            registerWithServer();
+            setIsServerOffline(false);
+          });
+          // Timeout to show "Offline" status
+          setTimeout(() => {
+            if (!s.connected) setIsServerOffline(true);
+          }, 3000);
         }
+        
+        s.on('connect', () => setIsServerOffline(false));
+        s.on('disconnect', () => setIsServerOffline(true));
 
         s.off('pair:received').on('pair:received', async (data: { partnerId: string; publicKey: string; nick: string; avatar: string }) => {
           setIsConnecting(true);
@@ -399,6 +411,13 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onPair, config }) => {
                 Connect your heart and your device to your partner's through an end-to-end encrypted line.
               </p>
             </div>
+
+            {isServerOffline && (
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-full flex items-center space-x-2">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Secure Server Unreachable – Establishing Link...</span>
+              </motion.div>
+            )}
 
             <div className="w-full space-y-4 pt-4">
               <button 

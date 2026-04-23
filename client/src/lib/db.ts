@@ -51,17 +51,23 @@ export async function initDB(): Promise<IDBPDatabase> {
 
   try {
     return await tryOpen();
-  } catch (err) {
-    console.error('[DB] Critical failed to open, resetting database...', err);
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.deleteDatabase(DB_NAME);
-      req.onsuccess = () => {
-        console.warn('[DB] Database wiped successfully.');
-        resolve();
-      };
-      req.onerror = () => reject(req.error);
-    });
-    return await tryOpen();
+  } catch (err: any) {
+    console.error('[DB] Failed to open database:', err);
+    
+    // Only wipe if it's a version mismatch that we can't recover from,
+    // or if the database is explicitly corrupt.
+    if (err.name === 'VersionError') {
+      console.warn('[DB] Version mismatch detected, attempting recovery...');
+      await new Promise<void>((resolve) => {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = () => resolve();
+        req.onerror = () => resolve();
+      });
+      return await tryOpen();
+    }
+    
+    // For other errors, just throw and let the app handle the loading state
+    throw err;
   }
 }
 

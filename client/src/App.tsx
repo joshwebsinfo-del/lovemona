@@ -84,6 +84,7 @@ const AppContent = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [partner, setPartner] = useState<Partner | null>(null);
   const [sharedKey, setSharedKey] = useState<CryptoKey | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   
   // ── Call State ──
   const [callActive, setCallActive] = useState(false);
@@ -166,8 +167,13 @@ const AppContent = () => {
     // 3. Heartbeat (High Rate)
     const hb = setInterval(() => {
        const s = getSocket();
-       if (s?.connected) s.emit('heartbeat', { ts: Date.now() });
-    }, 15000); 
+       if (s?.connected) {
+         setIsConnected(true);
+         s.emit('heartbeat', { ts: Date.now() });
+       } else {
+         setIsConnected(false);
+       }
+    }, 10000); 
 
     return () => {
        window.removeEventListener('touchstart', handleActive);
@@ -187,7 +193,13 @@ const AppContent = () => {
         db.get('identity', 'me') 
       ]);
       
-      if (config) setAppConfig(config);
+      if (config) {
+        setAppConfig(config);
+      } else if (identity) {
+        console.warn('[App] Config missing but identity found! Data might be partially corrupted.');
+        // If we have an identity but no PINs, we still need them to set up PINs again,
+        // but we should be aware that this isn't a completely fresh start.
+      }
       
       // Session Persistence
       const session = localStorage.getItem('lock_session');
@@ -202,6 +214,16 @@ const AppContent = () => {
          } catch { localStorage.removeItem('lock_session'); }
       }
 
+      if (identity) {
+        initSocket(identity.userId);
+        const s = getSocket();
+        if (s) {
+          s.on('connect', () => setIsConnected(true));
+          s.on('disconnect', () => setIsConnected(false));
+          if (s.connected) setIsConnected(true);
+        }
+      }
+
       if (p) {
         setPartner(p);
         setIsPaired(true);
@@ -209,7 +231,6 @@ const AppContent = () => {
            const importedPartnerKey = await importPublicKey(p.publicKeyPem);
            const key = await deriveSharedSecret(identity.privateKey, importedPartnerKey);
            setSharedKey(key);
-           initSocket(identity.userId);
 
            // Optimization: Parallel cloud restore
            (async () => {
@@ -804,6 +825,21 @@ const AppContent = () => {
   return (
     <div className={`h-screen w-full bg-transparent overflow-hidden flex flex-col font-sans relative transition-all duration-300 ${isBlurred ? 'opacity-0 blur-2xl pointer-events-none scale-95' : 'opacity-100 blur-0 scale-100'}`}>
       <GlobalBackground />
+      
+      <AnimatePresence>
+        {!isConnected && isUnlocked && !isLoading && (
+          <motion.div 
+            initial={{ y: -50, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: -50, opacity: 0 }}
+            className="fixed top-0 left-0 right-0 z-[2000] bg-red-500/20 border-b border-red-500/30 backdrop-blur-xl py-2 px-4 flex items-center justify-center space-x-3 shadow-2xl"
+          >
+            <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+            <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Lost Connection – Re-Establishing Secure Line</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {isLoading ? (
         <div className="fixed inset-0 bg-[#0a0a0c] flex items-center justify-center z-[1001]">
            <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />

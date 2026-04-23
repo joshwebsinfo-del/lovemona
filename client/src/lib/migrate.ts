@@ -14,13 +14,13 @@ export async function ensureFreshDB(): Promise<void> {
       const stores = Array.from(db.objectStoreNames);
       db.close();
 
-      const needsMigration =
-        version < REQUIRED_VERSION ||
-        !stores.includes('identity') ||
-        !stores.includes('partner');
+      // Only wipe if it's a strictly older version. 
+      // We don't wipe if stores are missing because initDB will create them.
+      // version === 0 or version === 1 with no stores usually means a fresh install.
+      const needsMigration = version > 0 && version < REQUIRED_VERSION;
 
       if (needsMigration) {
-        console.log('[Migrate] Old DB detected, wiping for fresh start...');
+        console.log(`[Migrate] DB version v${version} is outdated (Required: v${REQUIRED_VERSION}). Wiping for fresh start...`);
         const del = indexedDB.deleteDatabase(DB_NAME);
         del.onsuccess = () => {
           console.log('[Migrate] Old DB deleted. Fresh start.');

@@ -8,6 +8,17 @@ import { registerSW } from 'virtual:pwa-register'
 // Register Service Worker for offline capability
 registerSW({ immediate: true })
 
+// Request persistent storage to prevent browser eviction
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(persistent => {
+    if (persistent) {
+      console.log('[Storage] Persistence granted');
+    } else {
+      console.warn('[Storage] Persistence denied');
+    }
+  });
+}
+
 // Run DB migration before mounting the app
 ensureFreshDB().then(() => {
   createRoot(document.getElementById('root')!).render(
